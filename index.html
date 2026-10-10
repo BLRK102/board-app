@@ -119,7 +119,8 @@ function toast(msg, action, fn) {
 
 // ---- GitHub ----
 async function gh(method, body) {
-  const r = await fetch(method === 'GET' ? `${API}?ref=${BRANCH}` : API, {
+  // t= busts GitHub's shared cache (s-maxage=60), which otherwise serves browsers a copy up to a minute old
+  const r = await fetch(method === 'GET' ? `${API}?ref=${BRANCH}&t=${Date.now()}` : API, {
     method, cache: 'no-store', body: body && JSON.stringify(body),
     headers: { Authorization: `Bearer ${store.get('board:token', '')}`, Accept: 'application/vnd.github+json' },
   });

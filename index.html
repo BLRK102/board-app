@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#141414">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Board</title>
+<style>
+/* Colours: PureTheme (Plugin_Tools/Source/Plugin_Tools/Public/PureTheme.h) */
+:root{--bg:#141414;--col:#1C1C1C;--card:#262626;--line:#3A3A3A;--accent:#C9FF3D;--on-accent:#0A0A0A;--text:#fff;--dim:#9A9A9A;--warn:#FFB020;--danger:#FF4D4D}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 system-ui,"Segoe UI",sans-serif;padding-bottom:env(safe-area-inset-bottom)}
+header{display:flex;align-items:center;gap:12px;padding:14px 16px;padding-top:max(14px,env(safe-area-inset-top));border-bottom:1px solid var(--line)}
+header h1{font-size:16px;margin:0;color:var(--accent);letter-spacing:.5px}
+#date{color:var(--dim)}
+#status{margin-left:auto;font-size:12px;color:var(--dim)}
+#status.ok{color:var(--accent)} #status.bad{color:var(--warn)}
+input,textarea,select{background:var(--col);border:1px solid var(--line);color:var(--text);padding:10px 12px;border-radius:6px;font:inherit;width:100%}
+button{background:var(--card);color:var(--text);border:0;padding:10px 16px;border-radius:6px;font:inherit;font-weight:600;cursor:pointer}
+button.primary{background:var(--accent);color:var(--on-accent)}
+button.danger{color:var(--danger)}
+form.quick{display:flex;gap:8px;padding:12px 16px}
+#cols{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;padding:6px 16px 20px}
+.col{background:var(--col);border:1px solid var(--line);border-radius:8px;padding:10px;min-height:300px}
+.col h2{font-size:12px;text-transform:uppercase;letter-spacing:1px;margin:2px 4px 10px;color:var(--dim);display:flex;justify-content:space-between}
+.col-today h2{color:var(--accent)} .col-continue h2{color:var(--warn)}
+.col h2 span{background:var(--line);color:var(--text);border-radius:10px;padding:0 7px}
+.card{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--line);border-radius:8px;padding:9px 10px;margin-bottom:8px;cursor:pointer}
+.col-today .card{border-left-color:var(--accent)} .col-continue .card{border-left-color:var(--warn)} .col-done .card{opacity:.8}
+.card .t{font-weight:600;overflow-wrap:anywhere}
+.card .meta{color:var(--dim);font-size:11px;margin-top:4px}
+.card .d,.card .actions{display:none}
+.card.open .d{display:block;color:var(--dim);margin-top:6px;font-size:13px;white-space:pre-line;overflow-wrap:anywhere}
+.card.open .actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.card .actions button{padding:6px 10px;font-size:12px;background:var(--col)}
+.over{outline:2px dashed var(--accent)}
+#toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 14px;display:none;gap:12px;align-items:center;z-index:9;max-width:92vw}
+#toast.show{display:flex}
+#toast button{padding:4px 10px;background:var(--accent);color:var(--on-accent)}
+dialog{background:var(--col);color:var(--text);border:1px solid var(--line);border-radius:8px;width:min(480px,92vw)}
+dialog::backdrop{background:#000a}
+label{display:block;margin:10px 0 4px;color:var(--dim);font-size:12px}
+.row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+#setup{max-width:480px;margin:40px auto;padding:0 16px}
+#setup p{color:var(--dim)} #setup a{color:var(--accent)} #setup-err{color:var(--warn)}
+@media (max-width:760px){#cols{grid-template-columns:repeat(4,86vw);overflow-x:auto;scroll-snap-type:x mandatory}.col{scroll-snap-align:start}}
+</style>
+</head>
+<body>
+<header><h1>▣ BOARD</h1><span id="date"></span><span id="status"></span></header>
+
+<main id="app" hidden>
+  <form class="quick" id="quick">
+    <input id="q" placeholder="Quick add… (or tell Claude &quot;take a note&quot;)" autocomplete="off">
+    <button class="primary">Add</button>
+  </form>
+  <div id="cols"></div>
+</main>
+
+<section id="setup" hidden>
+  <h2>Connect this device</h2>
+  <p id="setup-err"></p>
+  <p>Paste a GitHub fine-grained token with access to <b>BLRK102/SecondBrain</b> only and permission
+     <b>Contents: Read and write</b>. <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Create one</a>.</p>
+  <form id="setup-form">
+    <label>Token<input id="token" type="password" required autocomplete="off"></label>
+    <label>This device<select id="device"><option>phone</option><option>pc</option><option>laptop</option></select></label>
+    <p><button class="primary">Connect</button></p>
+  </form>
+</section>
+
+<dialog id="editor"><form method="dialog">
+  <label>Title<input id="e-title" required></label>
+  <label>Description<textarea id="e-desc" rows="3"></textarea></label>
+  <label>Project<input id="e-project"></label>
+  <label><input type="checkbox" id="e-billable" style="width:auto"> Billable</label>
+  <div class="row"><button value="cancel" formnovalidate>Cancel</button><button value="save" class="primary">Save</button></div>
+</form></dialog>
+
+<div id="toast"><span id="toast-msg"></span><button id="toast-btn" hidden></button></div>
+
+<script type="module">
+import { COLUMNS, serialize, applyOp, newCard, replay, findCard, column, needsRollover, today, toBase64, fromBase64 } from './board.js';
+
+const REPO = 'BLRK102/SecondBrain', BRANCH = 'main';
+const DEFAULT_PATH = '40_Areas/Board/Board.md';
+const asked = new URLSearchParams(location.search).get('path'); // ?path= = scratch board for testing; only files in the Board folder
+const PATH = /^40_Areas\/Board\/[\w-]+\.md$/.test(asked || '') ? asked : DEFAULT_PATH;
+const API = `https://api.github.com/repos/${REPO}/contents/${PATH}`;
+const KEY = `board:${PATH}:`;
+const $ = id => document.getElementById(id);
+const store = { // localStorage can throw (private mode): the app still works, just forgets on close
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+
+let pending = store.get(KEY + 'pending', []);                 // ops not yet saved to GitHub
+let board = replay(store.get(KEY + 'cache', ''), pending).board; // last known remote + our unsaved ops
+let sha = null, flushing = false, saves = 0, retryTimer;
+const open = new Set();
+
+const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+const status = (text, cls = '') => { $('status').textContent = text; $('status').className = cls; };
+const savePending = () => store.set(KEY + 'pending', pending);
+let toastTimer;
+function toast(msg, action, fn) {
+  $('toast-msg').textContent = msg;
+  $('toast-btn').hidden = !action;
+  $('toast-btn').textContent = action || '';
+  $('toast-btn').onclick = () => { $('toast').classList.remove('show'); fn(); };
+  $('toast').classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => $('toast').classList.remove('show'), 6000);
+}
+
+// ---- GitHub ----
+async function gh(method, body) {
+  const r = await fetch(method === 'GET' ? `${API}?ref=${BRANCH}` : API, {
+    method, cache: 'no-store', body: body && JSON.stringify(body),
+    headers: { Authorization: `Bearer ${store.get('board:token', '')}`, Accept: 'application/vnd.github+json' },
+  });
+  if (r.status === 401 || r.status === 403 || r.status === 404) {
+    showSetup(r.status === 401 ? 'Token rejected or expired — paste a new one.'
+      : r.status === 403 ? "Token can't write to SecondBrain — check its Contents permission."
+      : `Can't see ${REPO}/${PATH} — check the token's repository access.`);
+    throw new Error('auth');
+  }
+  return r;
+}
+
+async function pull() {
+  const seen = saves;
+  const r = await gh('GET');
+  if (!r.ok) throw new Error(`load ${r.status}`);
+  const j = await r.json();
+  if (saves !== seen) return; // we saved while this was in flight: it's stale
+  const text = fromBase64(j.content);
+  const { board: b, errors } = replay(text, pending);
+  if (errors.length) {
+    pending = pending.filter(op => !errors.some(e => e.op === op));
+    savePending();
+    toast(`${errors.length} change(s) dropped — that card was deleted on another device`);
+  }
+  board = b; sha = j.sha;
+  store.set(KEY + 'cache', text);
+  render();
+}
+
+// Saves the whole board with the last-seen sha. If someone saved first (409/422), take theirs, re-apply ours, retry.
+async function flush() {
+  if (flushing || !sha) return;
+  flushing = true;
+  let conflicts = 0;
+  try {
+    while (pending.length) {
+      status('saving…');
+      const sent = pending.length, text = serialize(board);
+      const r = await gh('PUT', { message: 'Board: update', content: toBase64(text), sha, branch: BRANCH });
+      if (r.ok) {
+        sha = (await r.json()).content.sha;
+        saves++;
+        pending = pending.slice(sent); // ops made while this save was in flight stay queued
+        savePending();
+        store.set(KEY + 'cache', text);
+      } else if ((r.status === 409 || r.status === 422) && ++conflicts <= 3) {
+        await pull();
+      } else throw new Error(`save ${r.status}`);
+    }
+    status('● saved', 'ok');
+  } catch (e) {
+    if (e.message !== 'auth') {
+      status(navigator.onLine ? '⚠ not saved — retrying' : 'offline — not saved', 'bad');
+      clearTimeout(retryTimer);
+      retryTimer = setTimeout(flush, 30000);
+    }
+  } finally { flushing = false; }
+}
+
+async function refresh() {
+  if (flushing || !store.get('board:token', '')) return;
+  try { await pull(); }
+  catch (e) { if (e.message !== 'auth') status(pending.length ? 'offline — not saved' : 'offline — last copy', 'bad'); return; }
+  if (needsRollover(board)) commit({ type: 'rollover', date: today() });
+  if (pending.length) flush(); else status('● saved', 'ok');
+}
+
+function commit(op) {
+  const error = applyOp(board, op);
+  if (error) {
+    toast(error === 'gone' ? 'That card changed on another device — refreshed' : `Not saved: ${error}`);
+    if (error === 'gone') refresh();
+    return;
+  }
+  pending.push(op);
+  savePending();
+  render();
+  if (!sha) status('offline — not saved', 'bad'); // first load hasn't succeeded yet
+  flush();
+}
+
+// ---- UI ----
+function cardHtml(c, colName) {
+  const meta = [c.fields.project, c.date && `✓ ${c.date}`, c.fields.billable === 'true' && 'billable', c.fields.src && `from ${c.fields.src}`]
+    .filter(Boolean).join(' · ');
+  const moves = COLUMNS.filter(n => n !== colName).map(n => `<button data-move="${n}">→ ${n}</button>`).join('');
+  return `<div class="card${open.has(c.id) ? ' open' : ''}" draggable="true" data-id="${esc(c.id)}">
+    <div class="t">${esc(c.title)}</div>
+    ${c.desc.length ? `<div class="d">${esc(c.desc.join('\n'))}</div>` : ''}
+    ${meta ? `<div class="meta">${esc(meta)}</div>` : ''}
+    <div class="actions">${moves}<button data-edit>Edit</button><button data-del class="danger">Delete</button></div>
+  </div>`;
+}
+
+function render() {
+  $('date').textContent = new Date().toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  $('cols').innerHTML = COLUMNS.map(name => {
+    const cards = column(board, name).cards;
+    return `<div class="col col-${name.toLowerCase()}" data-col="${name}">
+      <h2>${name} <span>${cards.length}</span></h2>${cards.map(c => cardHtml(c, name)).join('')}</div>`;
+  }).join('');
+}
+
+$('cols').addEventListener('click', e => {
+  const el = e.target.closest('.card');
+  if (!el) return;
+  const id = el.dataset.id, btn = e.target.closest('button');
+  if (!btn) { open.has(id) ? open.delete(id) : open.add(id); el.classList.toggle('open'); return; }
+  if (btn.dataset.move) commit({ type: 'move', id, col: btn.dataset.move, date: today() });
+  else if ('edit' in btn.dataset) edit(id);
+  else if ('del' in btn.dataset) remove(id);
+});
+
+let dragId = null;
+$('cols').addEventListener('dragstart', e => {
+  dragId = e.target.closest('.card')?.dataset.id;
+  e.dataTransfer.setData('text/plain', dragId || '');
+});
+$('cols').addEventListener('dragover', e => {
+  const col = e.target.closest('.col');
+  if (col && dragId) { e.preventDefault(); col.classList.add('over'); }
+});
+$('cols').addEventListener('dragleave', e => e.target.closest('.col')?.classList.remove('over'));
+$('cols').addEventListener('drop', e => {
+  const col = e.target.closest('.col');
+  if (!col || !dragId) return;
+  e.preventDefault();
+  col.classList.remove('over');
+  const f = findCard(board, dragId);
+  if (f && f.col.name !== col.dataset.col) commit({ type: 'move', id: dragId, col: col.dataset.col, date: today() });
+  dragId = null;
+});
+
+$('quick').addEventListener('submit', e => {
+  e.preventDefault();
+  const title = $('q').value.trim();
+  if (!title) return;
+  commit({ type: 'add', col: 'Notes', card: newCard(board, { title, fields: { src: store.get('board:device', 'phone') } }) });
+  $('q').value = '';
+});
+
+let editing = null;
+function edit(id) {
+  const c = findCard(board, id)?.card;
+  if (!c) return;
+  editing = id;
+  $('e-title').value = c.title;
+  $('e-desc').value = c.desc.join('\n');
+  $('e-project').value = c.fields.project || '';
+  $('e-billable').checked = c.fields.billable === 'true';
+  $('editor').returnValue = '';
+  $('editor').showModal();
+}
+$('editor').addEventListener('close', () => {
+  const c = editing && findCard(board, editing)?.card;
+  if ($('editor').returnValue === 'save' && c) {
+    const fields = { ...c.fields, project: $('e-project').value, billable: $('e-billable').checked ? 'true' : '' };
+    commit({ type: 'edit', id: editing, patch: { title: $('e-title').value, desc: $('e-desc').value.split('\n'), fields } });
+  }
+  editing = null;
+});
+
+function remove(id) {
+  const f = findCard(board, id);
+  if (!f) return;
+  const card = structuredClone(f.card), col = f.col.name;
+  commit({ type: 'delete', id });
+  toast(`Deleted “${card.title}”`, 'Undo', () => commit({ type: 'add', col, card }));
+}
+
+function showSetup(msg = '') {
+  $('app').hidden = true;
+  $('setup').hidden = false;
+  $('setup-err').textContent = msg;
+  $('device').value = store.get('board:device', 'phone');
+}
+$('setup-form').addEventListener('submit', e => {
+  e.preventDefault();
+  store.set('board:token', $('token').value.trim());
+  store.set('board:device', $('device').value);
+  $('token').value = '';
+  $('setup').hidden = true;
+  $('app').hidden = false;
+  refresh();
+});
+
+// ---- start ----
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+addEventListener('online', refresh);
+setInterval(() => { if (!document.hidden) refresh(); }, 60000);
+if (store.get('board:token', '')) {
+  $('app').hidden = false;
+  render();
+  status(pending.length ? 'offline — not saved' : '…');
+  refresh();
+} else showSetup();
+</script>
+</body>
+</html>

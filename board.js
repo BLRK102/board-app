@@ -11,7 +11,7 @@ export const today = () => new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
 
 export function parse(text) {
   const b = { front: [], head: [], cols: [], tail: [] };
-  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  const lines = text.replace(/^﻿/, '').replace(/\r\n/g, '\n').split('\n');
   let i = 0;
   if (lines[0] === '---') {
     for (i = 1; i < lines.length && lines[i] !== '---'; i++) b.front.push(lines[i]);

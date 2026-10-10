@@ -310,8 +310,9 @@ $('setup-form').addEventListener('submit', e => {
 // ---- start ----
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+addEventListener('focus', refresh); // switching windows (e.g. back from Claude) doesn't fire visibilitychange
 addEventListener('online', refresh);
-setInterval(() => { if (!document.hidden) refresh(); }, 60000);
+setInterval(() => { if (!document.hidden) refresh(); }, 15000); // ~240 GETs/h per open device, well under GitHub's 5000/h
 if (store.get('board:token', '')) {
   $('app').hidden = false;
   render();

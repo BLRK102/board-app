@@ -148,6 +148,10 @@ export function applyOp(b, op) {
     case 'rollover':
       rollover(b, op.date);
       return null;
+    case 'flag': // front-matter switch, e.g. tidy: requested ('' removes it)
+      if (!/^\w+$/.test(op.key)) return 'unknown';
+      setFront(b, op.key, oneLine(op.value));
+      return null;
     default:
       return 'unknown';
   }
@@ -165,8 +169,10 @@ export function replay(text, ops) {
 const front = (b, key) => (b.front.find(l => l.startsWith(`${key}:`)) || '').slice(key.length + 1).trim();
 function setFront(b, key, value) {
   const i = b.front.findIndex(l => l.startsWith(`${key}:`));
+  if (value === '') { if (i >= 0) b.front.splice(i, 1); return; }
   if (i < 0) b.front.push(`${key}: ${value}`); else b.front[i] = `${key}: ${value}`;
 }
+export const getFlag = front;
 
 export const needsRollover = (b, day = today()) => front(b, 'rollover') < day;
 

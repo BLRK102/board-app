@@ -65,10 +65,27 @@ label{display:block;margin:10px 0 4px;color:var(--dim);font-size:12px}
 #cal .g button:disabled{opacity:.25;cursor:default}
 #cal .cf{display:flex;justify-content:space-between;align-items:center;margin-top:12px;color:var(--dim);font-size:12px;gap:10px}
 #cal .cf button{padding:4px 10px;font-size:12px}
+body.full #quick, body.full #cols{display:none}
+#full{padding:6px 16px 24px} #full[hidden]{display:none}
+#full .fh{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap} #full .fh h2{margin:0;font-size:20px;min-width:180px;text-align:center}
+#full .fh .sum{margin-left:auto;color:var(--dim)} #full .fh button:disabled{opacity:.3;cursor:default}
+#full .fbody{display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start}
+#full .fg{display:grid;grid-template-columns:repeat(7,1fr) 130px;gap:5px}
+#full .w{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:1px;padding:2px 4px}
+#full .fc{height:96px;padding:7px 8px;background:var(--col);border:1px solid var(--line);display:flex;flex-direction:column;justify-content:space-between;text-align:left;font-weight:500}
+#full .fc .r{display:flex;justify-content:space-between;align-items:center;width:100%} #full .fc b{font-size:15px}
+#full .fc .h{color:var(--accent);font-weight:700;font-size:13px} #full .fc .p{color:var(--warn);font-size:12px;font-weight:700}
+#full .fc .n{background:var(--card);border-radius:8px;padding:1px 7px;font-size:11px}
+#full .fc.out{opacity:.45} #full .fc.now{outline:1px solid var(--dim)} #full .fc.sel{border-color:var(--accent);background:var(--card)} #full .fc:disabled{opacity:.2;cursor:default}
+#full .wk{background:var(--card);border-radius:6px;padding:8px 10px;display:flex;flex-direction:column;justify-content:center;gap:2px} #full .wk b{font-size:20px;color:var(--accent)} #full .wk small{color:var(--dim)}
+#full .fd{background:var(--col);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+#full .fd h3{margin:0 0 4px} #full .fd h4{margin:14px 0 4px;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--dim)}
+#full .fd ul{margin:0;padding-left:16px} #full .fd li{margin:3px 0;overflow-wrap:anywhere} #full .fd small,#full .dim{color:var(--dim)} #full .fd .recent{list-style:none;padding:0}
+@media (max-width:900px){#full .fbody{grid-template-columns:1fr}#full .fg{grid-template-columns:repeat(7,1fr)}#full .wk{grid-column:1/-1;flex-direction:row;gap:12px;align-items:center}#full .fc{height:72px}}
 </style>
 </head>
 <body>
-<header><h1>▣ BOARD</h1><span id="date"></span><span id="status"></span><button id="tidy" class="primary" hidden></button></header>
+<header><h1>▣ BOARD</h1><span id="date"></span><span id="status"></span><button id="fullbtn" title="Full-page calendar">🗓 Calendar</button><button id="tidy" class="primary" hidden></button></header>
 
 <main id="app" hidden>
   <form class="quick" id="quick">
@@ -76,6 +93,7 @@ label{display:block;margin:10px 0 4px;color:var(--dim);font-size:12px}
     <button class="primary">Add</button>
   </form>
   <div id="cols"></div>
+  <section id="full" hidden></section>
 </main>
 
 <section id="setup" hidden>
@@ -266,65 +284,125 @@ $('cols').addEventListener('click', e => {
   else if ('del' in btn.dataset) remove(id);
 });
 
-// ---- Done calendar: month grid with a count per day; older months load from Archive-YYYY-MM.md ----
-let hours = null; // { 'YYYY-MM-DD': { a: active h, b: billable h } } from Hours.json, written by board-cli maintain
-async function loadHours() {
-  if (hours) return;
-  hours = {};
+// ---- Done calendar (popover) + full-page month view with weekly totals ----
+// Extra data written by board-cli maintain: Hours.json {date:{a,b}} (ActivityWatch), Git.json [{d,t,r,m}] (pushed commits).
+const ghFile = async path => {
   try {
-    const r = await fetch(`https://api.github.com/repos/${REPO}/contents/40_Areas/Board/Hours.json?ref=${BRANCH}&t=${Date.now()}`, {
+    const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${path}?ref=${BRANCH}&t=${Date.now()}`, {
       cache: 'no-store', headers: { Authorization: `Bearer ${store.get('board:token', '')}`, Accept: 'application/vnd.github+json' } });
-    if (r.ok) hours = JSON.parse(fromBase64((await r.json()).content));
-    else if (r.status !== 404) hours = null;
-  } catch { hours = null; }
-  renderCal();
+    return r.ok ? fromBase64((await r.json()).content) : r.status === 404 ? '' : null; // '' = not there, null = try again later
+  } catch { return null; }
+};
+let hours = null, git = null, fullOpen = false, fullMonth = today().slice(0, 7), fullSel = today();
+async function loadExtras() {
+  if (!hours) { const t = await ghFile('40_Areas/Board/Hours.json'); if (t !== null) hours = t ? JSON.parse(t) : {}; }
+  if (!git) { const t = await ghFile('40_Areas/Board/Git.json'); if (t !== null) git = t ? JSON.parse(t) : []; }
+  redraw();
 }
 async function loadArchive(m) {
-  if (m in cal) return;
+  if (m in cal || m > today().slice(0, 7)) return;
   cal[m] = [];
-  try {
-    const r = await fetch(`https://api.github.com/repos/${REPO}/contents/40_Areas/Board/Archive-${m}.md?ref=${BRANCH}&t=${Date.now()}`, {
-      cache: 'no-store', headers: { Authorization: `Bearer ${store.get('board:token', '')}`, Accept: 'application/vnd.github+json' } });
-    if (r.ok) cal[m] = column(parse(fromBase64((await r.json()).content)), 'Done').cards;
-    else if (r.status !== 404) delete cal[m];
-  } catch { delete cal[m]; }
-  renderCal(); render();
+  const t = await ghFile(`40_Areas/Board/Archive-${m}.md`);
+  if (t === null) delete cal[m]; else if (t) cal[m] = column(parse(t), 'Done').cards;
+  redraw(); render();
 }
+const monthAt = (m, n) => { const [y, mo] = m.split('-').map(Number), d = new Date(y, mo - 1 + n, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+const redraw = () => { renderCal(); if (fullOpen) renderFull(); };
+
+// date -> { cards, pushes, a, b } from the board's Done, loaded archives, Hours.json and Git.json
+function dayInfo() {
+  const t = today(), info = {}, at = d => info[d] ||= { cards: [], pushes: [], a: 0, b: 0 };
+  for (const c of [...column(board, 'Done').cards, ...Object.values(cal).flat()]) at(c.date || t).cards.push(c);
+  for (const [d, v] of Object.entries(hours || {})) Object.assign(at(d), { a: v.a, b: v.b });
+  for (const p of git || []) at(p.d).pushes.push(p);
+  return info;
+}
+// Mon-first weeks (arrays of 'YYYY-MM-DD') covering the month, padded with the neighbouring months' days
+function weeksOf(m) {
+  const [y, mo] = m.split('-').map(Number), end = new Date(y, mo, 0), out = [];
+  const first = new Date(y, mo - 1, 1 - (new Date(y, mo - 1, 1).getDay() + 6) % 7);
+  for (let s = first; s <= end; s = new Date(s.getFullYear(), s.getMonth(), s.getDate() + 7))
+    out.push(Array.from({ length: 7 }, (_, i) => new Date(s.getFullYear(), s.getMonth(), s.getDate() + i).toLocaleDateString('en-CA')));
+  return out;
+}
+const sumDays = (days, info) => days.reduce((s, d) => {
+  const i = info[d];
+  if (i) { s.b += i.b; s.a += i.a; s.c += i.cards.length; s.p += i.pushes.length; }
+  return s;
+}, { b: 0, a: 0, c: 0, p: 0 });
+
 function renderCal() {
-  const [y, mo] = calMonth.split('-').map(Number), t = today(), counts = {};
-  for (const c of [...column(board, 'Done').cards, ...(cal[calMonth] || [])]) { const d = c.date || t; counts[d] = (counts[d] || 0) + 1; }
-  const lead = (new Date(y, mo - 1, 1).getDay() + 6) % 7, days = new Date(y, mo, 0).getDate();
-  const cells = Array(lead).fill('<span></span>');
-  for (let d = 1; d <= days; d++) {
-    const key = `${calMonth}-${String(d).padStart(2, '0')}`, n = counts[key] || 0;
-    const h = hours?.[key]?.b;
-    cells.push(`<button data-d="${key}" class="${n ? 'has ' : ''}${key === t ? 'now ' : ''}${key === doneDay ? 'sel' : ''}"${key > t ? ' disabled' : ''}><span class="r"><span>${d}</span>${n ? `<span class="n" title="cards done">${n}</span>` : ''}</span><span class="h">${h ? h + 'h' : ''}</span></button>`);
-  }
-  const total = Object.entries(counts).filter(([d]) => d.startsWith(calMonth)).reduce((a, [, n]) => a + n, 0);
-  const hrs = Object.entries(hours || {}).filter(([d]) => d.startsWith(calMonth)).reduce((a, [, v]) => a + v.b, 0);
-  const sel = hours?.[doneDay];
-  $('cal').innerHTML = `<div class="ch"><button data-nav="-1">‹</button>${new Date(y, mo - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}<button data-nav="1"${calMonth >= t.slice(0, 7) ? ' disabled' : ''}>›</button></div>
+  const t = today(), info = dayInfo(), days = weeksOf(calMonth).flat();
+  const cells = days.map(key => {
+    if (!key.startsWith(calMonth)) return '<span></span>';
+    const i = info[key], n = i?.cards.length, h = i?.b;
+    return `<button data-d="${key}" class="${n ? 'has ' : ''}${key === t ? 'now ' : ''}${key === doneDay ? 'sel' : ''}"${key > t ? ' disabled' : ''}><span class="r"><span>${Number(key.slice(8))}</span>${n ? `<span class="n" title="cards done">${n}</span>` : ''}</span><span class="h">${h ? h + 'h' : ''}</span></button>`;
+  });
+  const tot = sumDays(days.filter(d => d.startsWith(calMonth)), info), sel = hours?.[doneDay];
+  $('cal').innerHTML = `<div class="ch"><button data-nav="-1">‹</button>${new Date(calMonth + '-01T12:00').toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}<button data-nav="1"${calMonth >= t.slice(0, 7) ? ' disabled' : ''}>›</button></div>
     <div class="g">${'Mo Tu We Th Fr Sa Su'.split(' ').map(w => `<span class="w">${w}</span>`).join('')}${cells.join('')}</div>
-    <div class="cf"><span>${doneDay}${sel ? ` · ${sel.b}h billable of ${sel.a}h active` : ''}</span><span>${total} cards done · ${hrs.toFixed(1)}h billable this month</span><button data-today>Today</button></div>`;
+    <div class="cf"><span>${doneDay}${sel ? ` · ${sel.b}h billable of ${sel.a}h active` : ''}</span><span>${tot.c} cards · ${tot.b.toFixed(1)}h billable this month</span><span><button data-full>Full page</button> <button data-today>Today</button></span></div>`;
+}
+
+function renderFull() {
+  const t = today(), info = dayInfo(), weeks = weeksOf(fullMonth), f1 = n => (Math.round(n * 10) / 10).toString();
+  const rows = weeks.map(w => w.map(d => {
+    const i = info[d] || { cards: [], pushes: [], b: 0 };
+    return `<button data-fd="${d}" class="fc${d.startsWith(fullMonth) ? '' : ' out'}${d === t ? ' now' : ''}${d === fullSel ? ' sel' : ''}"${d > t ? ' disabled' : ''}>
+      <span class="r"><b>${Number(d.slice(8))}</b>${i.b ? `<span class="h">${f1(i.b)}h</span>` : ''}</span>
+      <span class="r">${i.cards.length ? `<span class="n">${i.cards.length} done</span>` : '<span></span>'}${i.pushes.length ? `<span class="p">⬆ ${i.pushes.length}</span>` : ''}</span></button>`;
+  }).join('') + (s => `<div class="wk"><b>${f1(s.b)}h</b><small>of ${f1(s.a)}h active</small><small>${s.c} done · ⬆ ${s.p}</small></div>`)(sumDays(w, info))).join('');
+  const tot = sumDays(weeks.flat().filter(d => d.startsWith(fullMonth)), info);
+  const sel = info[fullSel] || { cards: [], pushes: [], a: 0, b: 0 };
+  const pushHtml = list => list.map(p => `<li><small>${p.t}</small> <b>${esc(p.r)}</b> ${esc(p.m)}</li>`).join('');
+  const recent = (git || []).slice(0, 12);
+  $('full').innerHTML = `<div class="fh"><button data-fnav="-1">‹</button><h2>${new Date(fullMonth + '-01T12:00').toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</h2>
+      <button data-fnav="1"${fullMonth >= t.slice(0, 7) ? ' disabled' : ''}>›</button><button data-fnow>Today</button>
+      <span class="sum">${f1(tot.b)}h billable · ${tot.c} cards done · ⬆ ${tot.p} pushes</span><button data-fback class="primary">Back to board</button></div>
+    <div class="fbody"><div class="fg">${'Mo Tu We Th Fr Sa Su Week'.split(' ').map(w => `<span class="w">${w}</span>`).join('')}${rows}</div>
+    <aside class="fd"><h3>${fullSel}${fullSel === t ? ' · today' : ''}</h3>
+      <p class="dim">${sel.b ? `${f1(sel.b)}h billable of ${f1(sel.a)}h active` : 'No tracked hours'}</p>
+      <h4>Done (${sel.cards.length})</h4>${sel.cards.length ? `<ul>${sel.cards.map(c => `<li>${esc(c.title)}${c.fields.project ? ` <small>${esc(c.fields.project)}</small>` : ''}</li>`).join('')}</ul>` : '<p class="dim">Nothing completed.</p>'}
+      <p><button data-fshow>Show on board</button></p>
+      <h4>Pushes (${sel.pushes.length})</h4>${sel.pushes.length ? `<ul>${pushHtml(sel.pushes)}</ul>` : '<p class="dim">No pushes.</p>'}
+      <h4>Recent pushes</h4>${git ? `<ul class="recent">${recent.map(p => `<li><small>${p.d.slice(5)} ${p.t}</small> <b>${esc(p.r)}</b> ${esc(p.m)}</li>`).join('')}</ul>` : '<p class="dim">Loading…</p>'}
+    </aside></div>`;
+}
+function setFull(on) {
+  fullOpen = on;
+  document.body.classList.toggle('full', on);
+  $('full').hidden = !on;
+  if (on) { fullMonth = fullSel.slice(0, 7); for (const n of [-1, 0]) loadArchive(monthAt(fullMonth, n)); loadExtras(); renderFull(); scrollTo(0, 0); }
 }
 function shiftMonth(n) {
-  const [y, m] = calMonth.split('-').map(Number), d = new Date(y, m - 1 + n, 1);
-  calMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  calMonth = monthAt(calMonth, n);
   loadArchive(calMonth); renderCal();
 }
 document.addEventListener('click', e => {
   const b = e.target.closest('button');
   if (b?.id === 'donecal') {
     if (!$('cal').hidden) { $('cal').hidden = true; return; }
-    calMonth = doneDay.slice(0, 7); loadArchive(calMonth); loadHours(); renderCal();
+    calMonth = doneDay.slice(0, 7); loadArchive(calMonth); loadExtras(); renderCal();
     const r = b.getBoundingClientRect();
     $('cal').style.top = `${r.bottom + 6}px`;
     $('cal').style.left = `${Math.max(8, Math.min(r.right - 600, innerWidth - 608))}px`;
     $('cal').hidden = false;
   } else if (e.target.closest('#cal')) {
     if (b?.dataset.nav) shiftMonth(+b.dataset.nav);
+    else if (b && 'full' in b.dataset) { fullSel = doneDay; $('cal').hidden = true; setFull(true); }
     else if (b && ('d' in b.dataset || 'today' in b.dataset)) { doneDay = b.dataset.d || today(); $('cal').hidden = true; render(); }
-  } else $('cal').hidden = true;
+  } else {
+    $('cal').hidden = true;
+    if (b?.id === 'fullbtn') { fullSel = doneDay; setFull(!fullOpen); }
+    else if (b && e.target.closest('#full')) {
+      const d = b.dataset;
+      if (d.fnav) { fullMonth = monthAt(fullMonth, +d.fnav); loadArchive(monthAt(fullMonth, -1)); loadArchive(fullMonth); renderFull(); }
+      else if ('fnow' in d) { fullSel = today(); fullMonth = fullSel.slice(0, 7); renderFull(); }
+      else if (d.fd) { fullSel = d.fd; renderFull(); }
+      else if ('fshow' in d) { doneDay = fullSel; setFull(false); render(); }
+      else if ('fback' in d) setFull(false);
+    }
+  }
 });
 
 // Finishing work while viewing a past day files it under that day (for work you forgot to tick off)

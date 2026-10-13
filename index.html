@@ -29,7 +29,7 @@ form.quick{display:flex;gap:8px;padding:12px 16px}
 .col{background:var(--col);border:1px solid var(--line);border-radius:8px;padding:10px;min-height:300px}
 .col h2{font-size:12px;text-transform:uppercase;letter-spacing:1px;margin:2px 4px 10px;color:var(--dim);display:flex;justify-content:space-between}
 .col-today h2{color:var(--accent)} .col-continue h2{color:var(--warn)}
-.col h2 select{width:auto;margin-left:auto;margin-right:8px;padding:0 6px;font-size:11px}
+.col h2 #donecal{margin-left:auto;margin-right:8px;padding:0 8px;font-size:11px;background:var(--card)}
 .col h2 span{background:var(--line);color:var(--text);border-radius:10px;padding:0 7px}
 .card{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--line);border-radius:8px;padding:9px 10px;margin-bottom:8px;cursor:pointer}
 .col-today .card{border-left-color:var(--accent)} .col-continue .card{border-left-color:var(--warn)} .col-done .card{opacity:.8}
@@ -229,20 +229,19 @@ function render() {
   $('cols').innerHTML = COLUMNS.map(name => {
     let cards = column(board, name).cards, pick = '';
     if (name === 'Done') {
-      // Done shows one day (default today); older days stay reachable via the picker
-      const t = today(), day = c => c.date || t;
-      const days = [...new Set([t, ...cards.map(day)])].sort().reverse();
-      if (!days.includes(doneDay)) doneDay = t;
-      cards = cards.filter(c => day(c) === doneDay);
-      pick = `<select id="doneday">${days.map(d => `<option value="${d}"${d === doneDay ? ' selected' : ''}>${d === t ? 'Today' : d}</option>`).join('')}</select>`;
+      // Done shows one day (default today); the calendar button picks another
+      const t = today();
+      cards = cards.filter(c => (c.date || t) === doneDay);
+      pick = `<button id="donecal" title="Pick a day">📅 ${doneDay === t ? 'Today' : doneDay}</button><input type="date" id="doneday" value="${doneDay}" max="${t}" style="position:absolute;opacity:0;width:0;height:0;pointer-events:none" tabindex="-1">`;
     }
     return `<div class="col col-${name.toLowerCase()}" data-col="${name}">
       <h2>${name} ${pick}<span>${cards.length}</span></h2>${cards.map(c => cardHtml(c, name)).join('')}</div>`;
   }).join('');
 }
 
-$('cols').addEventListener('change', e => { if (e.target.id === 'doneday') { doneDay = e.target.value; render(); } });
+$('cols').addEventListener('change', e => { if (e.target.id === 'doneday') { doneDay = e.target.value || today(); render(); } });
 $('cols').addEventListener('click', e => {
+  if (e.target.id === 'donecal') return $('doneday').showPicker();
   const el = e.target.closest('.card');
   if (!el) return;
   const id = el.dataset.id, btn = e.target.closest('button');

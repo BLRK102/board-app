@@ -355,7 +355,6 @@ function renderFull() {
   const tot = sumDays(weeks.flat().filter(d => d.startsWith(fullMonth)), info);
   const sel = info[fullSel] || { cards: [], pushes: [], a: 0, b: 0 };
   const pushHtml = list => list.map(p => `<li><small>${p.t}</small> <b>${esc(p.r)}</b> ${esc(p.m)}</li>`).join('');
-  const recent = (git || []).slice(0, 12);
   $('full').innerHTML = `<div class="fh"><button data-fnav="-1">‹</button><h2>${new Date(fullMonth + '-01T12:00').toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</h2>
       <button data-fnav="1"${fullMonth >= t.slice(0, 7) ? ' disabled' : ''}>›</button><button data-fnow>Today</button>
       <span class="sum">${f1(tot.b)}h billable · ${tot.c} cards done · ⬆ ${tot.p} pushes</span><button data-fback class="primary">Back to board</button></div>
@@ -365,7 +364,6 @@ function renderFull() {
       <h4>Done (${sel.cards.length})</h4>${sel.cards.length ? `<ul>${sel.cards.map(c => `<li>${esc(c.title)}${c.fields.project ? ` <small>${esc(c.fields.project)}</small>` : ''}</li>`).join('')}</ul>` : '<p class="dim">Nothing completed.</p>'}
       <p><button data-fshow>Show on board</button></p>
       <h4>Pushes (${sel.pushes.length})</h4>${sel.pushes.length ? `<ul>${pushHtml(sel.pushes)}</ul>` : '<p class="dim">No pushes.</p>'}
-      <h4>Recent pushes</h4>${git ? `<ul class="recent">${recent.map(p => `<li><small>${p.d.slice(5)} ${p.t}</small> <b>${esc(p.r)}</b> ${esc(p.m)}</li>`).join('')}</ul>` : '<p class="dim">Loading…</p>'}
     </aside></div>`;
 }
 function setFull(on) {

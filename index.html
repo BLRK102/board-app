@@ -50,6 +50,19 @@ label{display:block;margin:10px 0 4px;color:var(--dim);font-size:12px}
 #setup{max-width:480px;margin:40px auto;padding:0 16px}
 #setup p{color:var(--dim)} #setup a{color:var(--accent)} #setup-err{color:var(--warn)}
 @media (max-width:760px){#cols{grid-template-columns:repeat(4,86vw);overflow-x:auto;scroll-snap-type:x mandatory}.col{scroll-snap-align:start}}
+#cal{position:fixed;z-index:20;width:290px;background:var(--col);border:1px solid var(--line);border-radius:8px;padding:12px;box-shadow:0 8px 28px #000a}
+#cal[hidden]{display:none}
+#cal .ch{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-weight:700}
+#cal .ch button{padding:2px 10px;background:var(--card)} #cal .ch button:disabled{opacity:.3;cursor:default}
+#cal .g{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;text-align:center}
+#cal .w{color:var(--dim);font-size:11px;padding:2px 0}
+#cal .g button{padding:0;height:38px;background:transparent;font-weight:500;font-size:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.1}
+#cal .g button small{font-size:10px;color:var(--accent);font-weight:700;height:11px}
+#cal .g button.has{background:var(--card)} #cal .g button.now{outline:1px solid var(--dim)}
+#cal .g button.sel{background:var(--accent);color:var(--on-accent)} #cal .g button.sel small{color:var(--on-accent)}
+#cal .g button:disabled{opacity:.25;cursor:default}
+#cal .cf{display:flex;justify-content:space-between;align-items:center;margin-top:10px;color:var(--dim);font-size:12px}
+#cal .cf button{padding:4px 10px;font-size:12px}
 </style>
 </head>
 <body>
@@ -83,10 +96,11 @@ label{display:block;margin:10px 0 4px;color:var(--dim);font-size:12px}
   <div class="row"><button value="cancel" formnovalidate>Cancel</button><button value="save" class="primary">Save</button></div>
 </form></dialog>
 
+<div id="cal" hidden></div>
 <div id="toast"><span id="toast-msg"></span><button id="toast-btn" hidden></button></div>
 
 <script type="module">
-import { COLUMNS, serialize, applyOp, newCard, replay, findCard, column, allCards, getFlag, needsRollover, today, toBase64, fromBase64 } from './board.js';
+import { COLUMNS, parse, serialize, applyOp, newCard, replay, findCard, column, allCards, getFlag, needsRollover, today, toBase64, fromBase64 } from './board.js';
 
 const REPO = 'BLRK102/SecondBrain', BRANCH = 'main';
 const DEFAULT_PATH = '40_Areas/Board/Board.md';
@@ -206,7 +220,7 @@ function commit(op) {
 }
 
 // ---- UI ----
-function cardHtml(c, colName) {
+function cardHtml(c, colName, readonly = false) {
   const meta = [c.fields.project, c.date && `✓ ${c.date}`, c.fields.billable === 'true' && 'billable', c.fields.src && `from ${c.fields.src}`]
     .filter(Boolean).join(' · ');
   const moves = COLUMNS.filter(n => n !== colName).map(n => `<button data-move="${n}">→ ${n}</button>`).join('');
@@ -214,11 +228,11 @@ function cardHtml(c, colName) {
     <div class="t">${esc(c.title)}</div>
     ${c.desc.length ? `<div class="d">${esc(c.desc.join('\n'))}</div>` : ''}
     ${meta ? `<div class="meta">${esc(meta)}</div>` : ''}
-    <div class="actions">${moves}<button data-edit>Edit</button><button data-del class="danger">Delete</button></div>
+    ${readonly ? '' : `<div class="actions">${moves}<button data-edit>Edit</button><button data-del class="danger">Delete</button></div>`}
   </div>`;
 }
 
-let doneDay = today();
+let doneDay = today(), calMonth = today().slice(0, 7), cal = {}; // cal[YYYY-MM] = that month's archived Done cards
 function render() {
   $('date').textContent = new Date().toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
   // Tidy: shown while quick-added cards exist; the PC's sync picks up the flag and has Claude clean them up
@@ -227,21 +241,20 @@ function render() {
   $('tidy').disabled = !!tidy;
   $('tidy').textContent = tidy ? '✨ Tidying…' : `✨ Tidy ${untidy}`;
   $('cols').innerHTML = COLUMNS.map(name => {
-    let cards = column(board, name).cards, pick = '';
+    let cards = column(board, name).cards, pick = '', ro = new Set();
     if (name === 'Done') {
-      // Done shows one day (default today); the calendar button picks another
-      const t = today();
-      cards = cards.filter(c => (c.date || t) === doneDay);
-      pick = `<button id="donecal" title="Pick a day">📅 ${doneDay === t ? 'Today' : doneDay}</button><input type="date" id="doneday" value="${doneDay}" max="${t}" style="position:absolute;opacity:0;width:0;height:0;pointer-events:none" tabindex="-1">`;
+      // Done shows one day (default today); the calendar picks another. Archived days are read-only.
+      const t = today(), arch = (cal[doneDay.slice(0, 7)] || []).filter(c => c.date === doneDay);
+      cards = [...cards.filter(c => (c.date || t) === doneDay), ...arch];
+      ro = new Set(arch);
+      pick = `<button id="donecal" title="Pick a day">📅 ${doneDay === t ? 'Today' : doneDay}</button>`;
     }
     return `<div class="col col-${name.toLowerCase()}" data-col="${name}">
-      <h2>${name} ${pick}<span>${cards.length}</span></h2>${cards.map(c => cardHtml(c, name)).join('')}</div>`;
+      <h2>${name} ${pick}<span>${cards.length}</span></h2>${cards.map(c => cardHtml(c, name, ro.has(c))).join('')}</div>`;
   }).join('');
 }
 
-$('cols').addEventListener('change', e => { if (e.target.id === 'doneday') { doneDay = e.target.value || today(); render(); } });
 $('cols').addEventListener('click', e => {
-  if (e.target.id === 'donecal') return $('doneday').showPicker();
   const el = e.target.closest('.card');
   if (!el) return;
   const id = el.dataset.id, btn = e.target.closest('button');
@@ -249,6 +262,52 @@ $('cols').addEventListener('click', e => {
   if (btn.dataset.move) commit({ type: 'move', id, col: btn.dataset.move, date: today() });
   else if ('edit' in btn.dataset) edit(id);
   else if ('del' in btn.dataset) remove(id);
+});
+
+// ---- Done calendar: month grid with a count per day; older months load from Archive-YYYY-MM.md ----
+async function loadArchive(m) {
+  if (m in cal) return;
+  cal[m] = [];
+  try {
+    const r = await fetch(`https://api.github.com/repos/${REPO}/contents/40_Areas/Board/Archive-${m}.md?ref=${BRANCH}&t=${Date.now()}`, {
+      cache: 'no-store', headers: { Authorization: `Bearer ${store.get('board:token', '')}`, Accept: 'application/vnd.github+json' } });
+    if (r.ok) cal[m] = column(parse(fromBase64((await r.json()).content)), 'Done').cards;
+    else if (r.status !== 404) delete cal[m];
+  } catch { delete cal[m]; }
+  renderCal(); render();
+}
+function renderCal() {
+  const [y, mo] = calMonth.split('-').map(Number), t = today(), counts = {};
+  for (const c of [...column(board, 'Done').cards, ...(cal[calMonth] || [])]) { const d = c.date || t; counts[d] = (counts[d] || 0) + 1; }
+  const lead = (new Date(y, mo - 1, 1).getDay() + 6) % 7, days = new Date(y, mo, 0).getDate();
+  const cells = Array(lead).fill('<span></span>');
+  for (let d = 1; d <= days; d++) {
+    const key = `${calMonth}-${String(d).padStart(2, '0')}`, n = counts[key] || 0;
+    cells.push(`<button data-d="${key}" class="${n ? 'has ' : ''}${key === t ? 'now ' : ''}${key === doneDay ? 'sel' : ''}"${key > t ? ' disabled' : ''}>${d}<small>${n || ''}</small></button>`);
+  }
+  const total = Object.entries(counts).filter(([d]) => d.startsWith(calMonth)).reduce((a, [, n]) => a + n, 0);
+  $('cal').innerHTML = `<div class="ch"><button data-nav="-1">‹</button>${new Date(y, mo - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}<button data-nav="1"${calMonth >= t.slice(0, 7) ? ' disabled' : ''}>›</button></div>
+    <div class="g">${'Mo Tu We Th Fr Sa Su'.split(' ').map(w => `<span class="w">${w}</span>`).join('')}${cells.join('')}</div>
+    <div class="cf"><span>${total} done this month</span><button data-today>Today</button></div>`;
+}
+function shiftMonth(n) {
+  const [y, m] = calMonth.split('-').map(Number), d = new Date(y, m - 1 + n, 1);
+  calMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  loadArchive(calMonth); renderCal();
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (b?.id === 'donecal') {
+    if (!$('cal').hidden) { $('cal').hidden = true; return; }
+    calMonth = doneDay.slice(0, 7); loadArchive(calMonth); renderCal();
+    const r = b.getBoundingClientRect();
+    $('cal').style.top = `${r.bottom + 6}px`;
+    $('cal').style.left = `${Math.max(8, Math.min(r.right - 290, innerWidth - 298))}px`;
+    $('cal').hidden = false;
+  } else if (e.target.closest('#cal')) {
+    if (b?.dataset.nav) shiftMonth(+b.dataset.nav);
+    else if (b && ('d' in b.dataset || 'today' in b.dataset)) { doneDay = b.dataset.d || today(); $('cal').hidden = true; render(); }
+  } else $('cal').hidden = true;
 });
 
 let dragId = null;

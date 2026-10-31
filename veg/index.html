@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#141414">
+<title>Vegpack Runs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap">
+<style>
+/* Pure theme (pure-theme.css, verbatim) */
+:root {
+  --accent: #C9FF3D; --accent-text: #0A0A0A; --bg: #141414; --surface: #1C1C1C; --surface-alt: #262626;
+  --pill: #454545; --border: #3A3A3A; --text: #FFFFFF; --muted: #9A9A9A;
+  --danger: #FF4D4D; --warn: #FFB020; --ok: #88CC88;
+  --danger-bg: #2E0303; --warn-bg: #170F03; --ok-bg: #030805;
+  --radius: 8px; --radius-btn: 6px;
+  --font: "Roboto", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "Roboto Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--text); font-family: var(--font); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.card.danger { background: var(--danger-bg); border-color: var(--danger); }
+.card.warn { background: var(--warn-bg); border-color: var(--warn); }
+.card.ok { background: var(--ok-bg); border-color: var(--ok); }
+.card.accent { border-color: var(--accent); }
+.btn { font: inherit; border: 0; border-radius: var(--radius-btn); padding: 5px 12px; cursor: pointer; background: var(--surface-alt); color: var(--text); }
+.btn:hover { filter: brightness(1.25); }
+.btn:disabled { opacity: .6; cursor: default; }
+.btn.primary { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+.pill { display: inline-block; border-radius: 9px; padding: 1px 8px; background: var(--pill); color: var(--text); font-size: .85em; }
+.pill.accent { background: var(--accent); color: var(--accent-text); }
+.tab { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); font: inherit; padding: 3px 8px; cursor: pointer; }
+.tab[aria-selected="true"] { color: var(--text); font-weight: 600; border-bottom-color: var(--accent); }
+input, select, textarea { font: inherit; background: var(--surface-alt); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-btn); }
+input:focus, select:focus, textarea:focus { outline: 1px solid var(--accent); }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+/* Layout: run header on top, five page tabs; Progress = stage strip + per-batch mesh x checkpoint tables. */
+* { box-sizing: border-box }
+[hidden] { display: none !important }
+html { padding-top: env(safe-area-inset-top, 0px) }
+body { margin: 0 }
+img { max-width: 100% }
+body { font-size: 14px; padding-inline: 16px; padding-block: 12px 48px }
+.wrap { max-width: 1180px; margin-inline: auto; display: grid; gap: 12px }
+.stack { display: grid; gap: 12px; min-width: 0 }
+.wrap > *, .stack > * { min-width: 0 }
+h1 { font-size: 20px; margin: 0; text-wrap: balance }
+.sub, .meta { color: var(--muted); font-size: 12px }
+.row { display: flex; gap: 8px 12px; align-items: center; flex-wrap: wrap; min-width: 0 }
+.between { justify-content: space-between }
+.head { padding: 14px 16px; display: grid; gap: 10px }
+.head select { padding: 4px 8px; max-width: 100% }
+.bar { height: 12px; background: var(--surface-alt); border-radius: 6px; overflow: hidden; display: flex }
+.bar.thin { height: 6px }
+.bar i { display: block; height: 100% }
+.bar .d { background: var(--accent) } .bar .f { background: var(--danger) } .bar .n { background: var(--warn) }
+.bar .r { background: repeating-linear-gradient(45deg, #7a9a25 0 6px, #5c7419 6px 12px) }
+.big { font-size: 28px; font-weight: 700 }
+.stat b { display: block; font-size: 17px } .stat span { color: var(--muted); font-size: 12px }
+.conn { color: var(--warn); font-size: 12px }
+.state { font-weight: 700; letter-spacing: .06em; font-size: 11px }
+.state.stale, .state.failed { background: var(--danger); color: #000 }
+.state.done { background: var(--ok); color: #000 }
+.tabs { display: flex; gap: 4px; flex-wrap: wrap }
+.tabs.main { border-bottom: 1px solid var(--border) }
+.tabs.main .tab { font-size: 15px; padding: 6px 12px }
+.cnt { background: var(--warn); color: #000; margin-left: 4px }
+.box { padding: 12px 16px; display: grid; gap: 8px; min-width: 0 }
+.logl { font-family: var(--mono); font-size: 12px; color: var(--muted); margin: 0; padding: 0; list-style: none; max-height: 8.5em; overflow-y: auto; overflow-wrap: anywhere }
+.needs ul { margin: 0; padding-left: 18px; display: grid; gap: 4px }
+.stages { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 6px }
+.stg { padding: 8px; text-align: center; font-size: 12px }
+.stg b { display: block; font-size: 15px; margin-top: 2px }
+.stg.cur { border-color: var(--accent) }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; color: var(--muted); font-size: 12px }
+.legend span { display: flex; gap: 5px; align-items: center }
+.grp { overflow: hidden }
+.grp h3 { margin: 0; padding: 10px 14px; font-size: 14px; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; border-bottom: 1px solid var(--border) }
+.gbar { flex: 1; min-width: 60px; max-width: 220px; height: 6px; background: var(--surface-alt); border-radius: 3px; overflow: hidden }
+.gbar i { display: block; height: 100%; background: var(--accent) }
+.tblwrap { overflow-x: auto }
+table { width: 100%; border-collapse: collapse }
+th { font-size: 11px; color: var(--muted); font-weight: 500; text-align: center; padding: 6px 2px; background: var(--surface) }
+th:first-child, td:first-child { text-align: left; padding-left: 14px }
+td { padding: 6px 2px; text-align: center; border-top: 1px solid var(--surface-alt) }
+tr:hover td { background: #202020 }
+.mesh { font-family: var(--mono); font-size: 12.5px; overflow-wrap: anywhere }
+.ck { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; font-size: 11px; font-weight: 700; font-style: normal }
+.ck.done { background: var(--accent); color: #000 } .ck.failed { background: var(--danger); color: #000 }
+.ck.need { background: var(--warn); color: #000 } .ck.skipped { color: var(--muted) } .ck.todo { border: 1px solid var(--pill) }
+.ck.running { border: 2px solid var(--accent) }
+@media (prefers-reduced-motion: no-preference) { .ck.running, .live .dot { animation: pulse 1.2s infinite } }
+@keyframes pulse { 50% { opacity: .35 } }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); display: inline-block }
+.rgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 10px }
+.rc { overflow: hidden; display: grid; min-width: 0 }
+.rc.fixed { border-color: var(--warn) }
+.shot { background: #000; aspect-ratio: 2 / 1; cursor: zoom-in; border: 0; padding: 0; display: block; width: 100%; max-width: 100% }
+.shot img { width: 100%; height: 100%; object-fit: contain; display: block }
+.stabs { display: flex; gap: 4px; padding: 6px 10px 0; flex-wrap: wrap }
+.rc .body { padding: 10px 12px; display: grid; gap: 6px; min-width: 0 }
+.facts { display: flex; gap: 6px; flex-wrap: wrap }
+.rc textarea { width: 100%; min-height: 44px; resize: vertical; padding: 6px 8px }
+.acts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px }
+.btn.rej { background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger) }
+.btn.rej[aria-pressed="true"] { background: var(--danger); color: #000 }
+.btn.app[aria-pressed="false"] { background: var(--surface-alt); color: var(--accent); border: 1px solid var(--accent) }
+.badge { font-size: 11px; font-weight: 700; color: #000; background: var(--warn); border-radius: 9px; padding: 1px 8px; white-space: nowrap }
+.badge.approved { background: var(--ok) } .badge.rejected { background: var(--danger) } .badge.pending { background: var(--pill); color: var(--text) }
+.said { color: var(--warn); font-size: 12px }
+.sgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 10px }
+.sc { padding: 12px 14px; display: grid; gap: 8px; min-width: 0 }
+.sc h4 { margin: 0; font-size: 14px }
+.kv { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; font-size: 13px }
+.kv span { color: var(--muted) } .kv b { font-family: var(--mono); font-weight: 400; font-size: 12px; text-align: right; overflow-wrap: anywhere }
+.src { font-size: 11px; color: var(--muted); font-family: var(--mono); overflow-wrap: anywhere }
+.lrow { display: grid; grid-template-columns: 9.5em 5.5em 1fr auto; gap: 8px; padding: 6px 14px; border-top: 1px solid var(--surface-alt); font-size: 13px; align-items: baseline }
+.lrow > * { min-width: 0; overflow-wrap: anywhere }
+.empty { padding: 24px; border: 1px dashed var(--border); border-radius: var(--radius); color: var(--muted) }
+.empty b { color: var(--text) }
+button:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+dialog { border: 0; padding: 0; background: #0a0a0a; max-width: 100vw; max-height: 100vh; width: 100vw; height: 100% }
+dialog::backdrop { background: rgba(0, 0, 0, .85) }
+.lb { display: grid; grid-template-rows: auto 1fr; height: 100%; color: var(--text) }
+.lb header { display: flex; gap: 10px; align-items: center; padding: 10px 14px; flex-wrap: wrap }
+.lb header strong { font-family: var(--mono); font-size: .9rem; flex: 1; min-width: 0; overflow-wrap: anywhere }
+.lb .img { overflow: auto; display: grid; place-items: center }
+.lb img { max-width: 100%; max-height: 100%; object-fit: contain }
+@media (max-width: 640px) { .big { font-size: 22px } th { font-size: 10px } .ck { width: 16px; height: 16px; font-size: 9px } .lrow { grid-template-columns: 1fr auto; } .lrow .lk { display: none } }
+</style>
+
+</head><body>
+<div class="wrap">
+  <section class="card head" id="head" aria-live="polite">
+    <div class="row between">
+      <div class="row"><h1>Vegpack Runs</h1><select id="run" aria-label="Run"></select></div>
+      <span class="pill state" id="state" hidden></span>
+    </div>
+    <div class="sub" id="headSub"></div>
+    <div class="bar" id="bar" aria-hidden="true"></div>
+    <div class="row" id="stats"></div>
+    <span class="conn" id="conn" hidden></span>
+  </section>
+
+  <nav class="tabs main" role="tablist" aria-label="Pages">
+    <button class="tab" role="tab" data-page="progress" id="t-progress">Progress</button>
+    <button class="tab" role="tab" data-page="review" id="t-review">Review</button>
+    <button class="tab" role="tab" data-page="settings" id="t-settings">Settings</button>
+    <button class="tab" role="tab" data-page="packs" id="t-packs">Packs</button>
+    <button class="tab" role="tab" data-page="log" id="t-log">Log</button>
+  </nav>
+
+  <div id="pg-progress" class="stack"></div>
+  <div id="pg-review" class="stack" hidden></div>
+  <div id="pg-settings" hidden></div>
+  <div id="pg-packs" hidden></div>
+  <div id="pg-log" class="stack" hidden></div>
+</div>
+
+<dialog id="lb" aria-label="Screenshot">
+  <div class="lb">
+    <header><strong id="lbName"></strong><button class="btn" id="lbPrev">Previous</button><button class="btn" id="lbNext">Next</button><button class="btn primary" id="lbClose">Close</button></header>
+    <div class="img"><img id="lbImg" alt=""></div>
+  </div>
+</dialog>
+
+<script>
+// Data: vault repo BLRK102/SecondBrain via the GitHub API with the Board app's token (same origin, key board:token).
+// runs/<run>/{run,ledger,items,log,verdicts}.json + runs/{index,packs,settings}.json on main; shots on branch veg-shots.
+// Claude's scripts write everything except verdicts.json, which only this page writes. See run_ledger.py.
+const REPO = "BLRK102/SecondBrain", ROOT = "20_Projects/Plugin_Tools/Vegpacks/runs", SHOTS_REF = "veg-shots";
+const POLL_S = 30, STALE_MIN = 10;
+const CK = ["Import", "Texel", "Cut", "Wind", "Audit", "Collision", "Shots", "Review", "Pushed"];
+const SYM = { done: "✓", failed: "✕", need: "!", skipped: "–", running: "", todo: "" };
+const S = { index: [], runs: {}, items: [], verdicts: {}, steps: {}, packs: [], settings: [], log: [],
+  drafts: {}, sel: null, picked: false, page: "progress", pf: "All", rf: "To review", group: "all", lf: "all", tab: {},
+  lb: null, loading: true, conn: "", saving: 0 };
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const ls = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) {} return null; };
+const token = () => { try { return JSON.parse(localStorage.getItem("board:token") || '""'); } catch (e) { return ""; } };
+S.page = ls("vd.page") || "progress"; S.rf = ls("vr.rfilter") || "To review";
+
+// ---- GitHub ----
+async function api(path, opts = {}) {
+  const r = await fetch(`https://api.github.com/repos/${REPO}/${path}`, { cache: "no-store", ...opts,
+    headers: { Authorization: `Bearer ${token()}`, Accept: "application/vnd.github+json", ...(opts.headers || {}) } });
+  if (r.status === 401 || r.status === 403) throw Object.assign(new Error("auth"), { auth: true });
+  return r;
+}
+const b64dec = b => new TextDecoder().decode(Uint8Array.from(atob(b.replace(/\s/g, "")), c => c.charCodeAt(0)));
+function b64enc(s) { const u = new TextEncoder().encode(s); let bin = ""; for (let i = 0; i < u.length; i += 0x8000) bin += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(bin); }
+// t= busts GitHub's shared cache (s-maxage=60), as in the Board app.
+async function listDir(dir) {
+  const r = await api(`contents/${dir}?ref=main&t=${Date.now()}`);
+  if (r.status === 404) return {};
+  if (!r.ok) throw new Error(`list ${r.status}`);
+  const out = {}; (await r.json()).forEach(f => out[f.name] = f.sha); return out;
+}
+const blobs = new Map(); // sha -> parsed JSON (blobs never change)
+async function blobJson(sha) {
+  if (!blobs.has(sha)) { const r = await api(`git/blobs/${sha}`); if (!r.ok) throw new Error(`blob ${r.status}`); blobs.set(sha, JSON.parse(b64dec((await r.json()).content))); }
+  return blobs.get(sha);
+}
+const shotUrls = new Map(); // path -> object URL (or a pending promise)
+function shotUrl(path) {
+  if (!shotUrls.has(path)) shotUrls.set(path, api(`contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${SHOTS_REF}`, { headers: { Accept: "application/vnd.github.raw" } })
+    .then(r => r.ok ? r.blob() : null).then(b => { const u = b ? URL.createObjectURL(b) : ""; shotUrls.set(path, u); return u; }).catch(() => { shotUrls.delete(path); return ""; }));
+  return shotUrls.get(path);
+}
+async function fillShots(root) {
+  for (const img of root.querySelectorAll("img[data-shot]")) {
+    const u = await shotUrl(img.dataset.shot);
+    if (u && img.isConnected) img.src = u;
+  }
+}
+
+let rootShas = {}, runShas = {}, polling = false;
+async function poll() {
+  if (polling || !token()) return;
+  polling = true;
+  try {
+    const root = await listDir(ROOT);
+    if (root["index.json"] !== rootShas["index.json"]) S.index = await blobJson(root["index.json"]);
+    if (root["packs.json"] && root["packs.json"] !== rootShas["packs.json"]) S.packs = Object.entries(await blobJson(root["packs.json"])).map(([id, v]) => ({ id, ...v }));
+    if (root["settings.json"] && root["settings.json"] !== rootShas["settings.json"]) S.settings = Object.entries(await blobJson(root["settings.json"])).map(([id, v]) => ({ id, ...v }));
+    rootShas = root;
+    pickDefault();
+    if (S.sel) {
+      const dir = await listDir(`${ROOT}/${S.sel}`), sel = S.sel;
+      const get = async (f, d) => dir[f] ? blobJson(dir[f]) : d;
+      if (dir["run.json"] !== runShas["run.json"]) S.runs[sel] = await get("run.json", null);
+      if (dir["ledger.json"] !== runShas["ledger.json"]) S.steps = (await get("ledger.json", {})).steps || {};
+      if (dir["items.json"] !== runShas["items.json"]) S.items = (await get("items.json", [])).map(it => ({ ...it, id: it.name }));
+      if (dir["log.json"] !== runShas["log.json"]) S.log = (await get("log.json", [])).map(l => ({ ...l, run: sel }));
+      if (dir["verdicts.json"] !== runShas["verdicts.json"] && !S.saving) S.verdicts = await get("verdicts.json", {});
+      runShas = S.saving ? { ...dir, "verdicts.json": runShas["verdicts.json"] } : dir;
+    }
+    S.loading = false; S.conn = "";
+  } catch (e) {
+    S.loading = false;
+    S.conn = e.auth ? "GitHub refused the token. Open the Board app on this device and paste a new one." : "Can't reach GitHub; showing the last copy. It keeps trying.";
+  }
+  polling = false;
+  render();
+}
+
+function ago(iso) {
+  const m = Math.round((Date.now() - Date.parse(iso)) / 60000);
+  return isNaN(m) ? "" : m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 2880 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`;
+}
+function when(iso, withYear) { const d = new Date(iso); if (isNaN(d)) return ""; const p = n => String(n).padStart(2, "0"); return `${withYear ? d.getFullYear() + "-" : ""}${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; }
+function dur(s) { if (!(s > 0)) return "—"; const m = Math.round(s / 60); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`; }
+function statusOf(id) { return (S.verdicts[id] && S.verdicts[id].status) || "pending"; }
+// Claude sets item.fixed_at when it reworks a rejected mesh; newer than the verdict means "look again".
+function isFixed(it) { const v = S.verdicts[it.id] || {}; return !!it.fixed_at && statusOf(it.id) !== "approved" && String(it.fixed_at) > String(v.at || ""); }
+function run() { return S.runs[S.sel] || null; }
+function isStale(r) { return r && r.state === "running" && (Date.now() - Date.parse(r.updated)) > STALE_MIN * 60000; }
+function runBatches() { return (run() && run().batches) || []; }
+function runItems() { return [...S.items].sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || String(a.name).localeCompare(b.name)); }
+function packOf(it) {
+  if (it.pack) return it.pack;
+  for (const cp of CK) { const s = S.steps[`${S.sel}~${it.name}~${cp}`]; if (s && s.pack) return s.pack; }
+  return null;
+}
+function packDoc(p) { return p ? S.packs.find(x => x.id === p || x.mount === p) : null; }
+function cell(it, cp) {
+  if (cp === "Review") {
+    const st = statusOf(it.id);
+    if (!(it.shots || []).length && st === "pending") return "todo";
+    return isFixed(it) ? "need" : st === "approved" ? "done" : st === "rejected" ? "failed" : "need";
+  }
+  if (cp === "Pushed") { const p = packDoc(packOf(it)); return p && p.main_sha && statusOf(it.id) === "approved" ? "done" : "todo"; }
+  const s = S.steps[`${S.sel}~${it.name}~${cp}`];
+  return s ? s.state : "todo";
+}
+function cellNote(it, cp) { const s = S.steps[`${S.sel}~${it.name}~${cp}`]; return s && s.note ? `${cp}: ${s.state} - ${s.note}` : `${cp}: ${cell(it, cp)}`; }
+
+// Mean seconds per mesh for each checkpoint from logged step durations, times what is left.
+function eta(items) {
+  const per = {};
+  S.log.filter(l => l.kind === "step" && l.checkpoint && l.duration_s > 0 && l.meshes > 0).forEach(l => { (per[l.checkpoint] ||= []).push(l.duration_s / l.meshes); });
+  let s = 0, known = false;
+  CK.forEach(cp => {
+    const p = per[cp]; if (!p) return;
+    const mean = p.reduce((a, b) => a + b, 0) / p.length;
+    s += mean * items.filter(it => !["done", "skipped"].includes(cell(it, cp))).length; known = true;
+  });
+  return known ? s : null;
+}
+
+function renderHead() {
+  const sel = $("run");
+  sel.innerHTML = S.index.map(r => `<option value="${esc(r.id)}"${r.id === S.sel ? " selected" : ""}>${esc(r.title || r.id)}${r.state === "running" ? " (running)" : ""}</option>`).join("");
+  sel.hidden = !S.index.length;
+  const r = run(), items = runItems(), stale = isStale(r);
+  const st = $("state");
+  st.hidden = !r;
+  if (r) { st.className = "pill state " + (stale ? "stale" : r.state === "running" ? "accent" : r.state); st.textContent = stale ? "STALE" : String(r.state || "").toUpperCase(); }
+  const b = runBatches();
+  $("headSub").textContent = [
+    r && r.started ? `Started ${when(r.started, true)}` : "",
+    b.length ? `${b.length} batch${b.length > 1 ? "es" : ""}` : "",
+    r || items.length ? `${items.length} meshes` : "",
+    r && r.updated ? (stale ? `no update for ${ago(r.updated).replace(" ago", "")}` : `updated ${ago(r.updated)}`) : "",
+  ].filter(Boolean).join(" · ");
+  const cells = items.flatMap(it => CK.map(cp => cell(it, cp)));
+  const n = cells.length || 1, c = k => cells.filter(x => x === k).length;
+  const done = c("done") + c("skipped"), running = c("running"), failed = c("failed"), need = c("need") + ((r && r.needs) || []).length;
+  $("bar").innerHTML = items.length ? `<i class="d" style="width:${100 * done / n}%"></i><i class="r" style="width:${100 * running / n}%"></i><i class="n" style="width:${100 * c("need") / n}%"></i><i class="f" style="width:${100 * failed / n}%"></i>` : "";
+  const through = items.filter(it => statusOf(it.id) === "approved").length, e = eta(items);
+  $("stats").innerHTML = items.length ? `<div class="big num">${Math.round(100 * done / n)}%</div>
+    <div class="stat"><b class="num">${through} / ${items.length}</b><span>through review</span></div>
+    <div class="stat"><b class="num">${e == null ? "—" : "≈ " + dur(e)}</b><span>left (est.)</span></div>
+    <div class="stat"><b class="num" style="color:var(--warn)">${need}</b><span>need you</span></div>
+    <div class="stat"><b class="num" style="color:var(--danger)">${failed}</b><span>failed</span></div>` : "";
+  $("conn").hidden = !S.conn; $("conn").textContent = S.conn;
+  const pending = items.filter(it => (statusOf(it.id) === "pending" || isFixed(it)) && (it.shots || []).length).length;
+  $("t-review").innerHTML = `Review${pending ? `<span class="pill cnt num">${pending}</span>` : ""}`;
+  document.querySelectorAll(".tabs.main .tab").forEach(t => t.setAttribute("aria-selected", String(t.dataset.page === S.page)));
+  ["progress", "review", "settings", "packs", "log"].forEach(p => $("pg-" + p).hidden = p !== S.page);
+}
+
+function emptyBox(title, text, html) { return `<div class="empty"><b>${esc(title)}</b><br>${html || esc(text)}</div>`; }
+function signIn() { return emptyBox("Sign in first", "", `This page reads the vault through GitHub with the Board app's token. Open <a href="../" style="color:var(--accent)">the Board app</a> on this device once and paste the token there, then come back.`); }
+
+function renderProgress() {
+  const r = run(), items = runItems(), el = $("pg-progress");
+  if (!token()) { el.innerHTML = signIn(); return; }
+  if (!r && !items.length) {
+    el.innerHTML = emptyBox(S.loading ? "Loading runs" : "No vegpack runs yet", "When Claude starts a vegpack run, this tab shows every mesh going through Import, Texel, Cut, Wind, Audit, Collision, Shots, Review and Pushed, live.");
+    return;
+  }
+  let h = "";
+  if (r) {
+    const stale = isStale(r), pct = r.total ? Math.min(100, 100 * (r.done || 0) / r.total) : 0;
+    h += `<div class="card box ${stale || r.state === "failed" ? "danger" : r.state === "running" ? "accent live" : ""}">
+      <div class="row between"><b class="row"><span class="dot"></span>${esc(stale ? "Stalled: " : r.state === "running" ? "Now: " : r.state === "done" ? "Finished: " : "Stopped: ")}${esc(r.stage || "")}${r.current && r.state === "running" ? ` · <span class="mesh">${esc(r.current)}</span>` : ""}</b>
+      ${r.total ? `<span class="num">${r.done || 0} / ${r.total}</span>` : ""}</div>
+      ${r.total ? `<div class="bar thin"><i class="d" style="width:${pct}%"></i></div>` : ""}
+      ${(r.log || []).length ? `<ol class="logl">${r.log.slice(-8).reverse().map(l => `<li>${esc(l)}</li>`).join("")}</ol>` : ""}</div>`;
+    const needs = r.needs || [];
+    if (needs.length) h += `<div class="card warn box needs"><b>Waiting on you</b><ul>${needs.map(n => `<li><span class="pill">${esc(n.kind)}</span> ${esc(n.text)}</li>`).join("")}</ul></div>`;
+  }
+  if (items.length) {
+    const curIdx = r ? CK.indexOf(r.stage) : -1;
+    h += `<div class="stages">${CK.map((cp, k) => {
+      const d = items.filter(it => ["done", "skipped"].includes(cell(it, cp))).length;
+      return `<div class="card stg ${k === curIdx ? "cur" : ""}">${cp}<b class="num">${Math.round(100 * d / items.length)}%</b></div>`;
+    }).join("")}</div>`;
+    h += `<div class="tabs" role="group" aria-label="Filter meshes">${["All", "Needs you", "Running", "Failed"].map(f => `<button class="tab" data-pf="${f}" aria-selected="${f === S.pf}">${f}</button>`).join("")}</div>
+      <div class="legend"><span><i class="ck done">✓</i>done</span><span><i class="ck running"></i>running</span><span><i class="ck need">!</i>needs you</span><span><i class="ck failed">✕</i>failed</span><span><i class="ck skipped">–</i>skipped</span><span><i class="ck todo"></i>to do</span></div>`;
+    const want = cs => S.pf === "All" || (S.pf === "Needs you" && cs.includes("need")) || (S.pf === "Running" && cs.includes("running")) || (S.pf === "Failed" && cs.includes("failed"));
+    const groups = runBatches().map(b => ({ id: b.id, title: b.title || b.id }));
+    if (items.some(it => !groups.some(g => g.id === it.batch))) groups.push({ id: null, title: groups.length ? "Other" : "Meshes" });
+    groups.forEach(g => {
+      const gi = items.filter(it => g.id ? it.batch === g.id : !groups.some(x => x.id && x.id === it.batch));
+      if (!gi.length) return;
+      const rows = gi.map(it => ({ it, cs: CK.map(cp => cell(it, cp)) }));
+      const shown = rows.filter(x => want(x.cs));
+      if (!shown.length) return;
+      const done = rows.reduce((a, x) => a + x.cs.filter(c => c === "done" || c === "skipped").length, 0), pct = Math.round(100 * done / (rows.length * CK.length));
+      const packs = [...new Set(gi.map(packOf).filter(Boolean))];
+      h += `<div class="card grp"><h3>${esc(g.title)} ${packs.map(p => `<span class="pill">${esc(p)}</span>`).join("")}<span class="gbar"><i style="width:${pct}%"></i></span><span class="num">${pct}%</span><span class="meta">${gi.length} meshes</span></h3>
+        <div class="tblwrap"><table><tr><th>Mesh</th>${CK.map(c => `<th>${c}</th>`).join("")}</tr>
+        ${shown.map(({ it, cs }) => `<tr><td><div class="mesh">${esc(it.name)}</div>${it.group ? `<div class="meta">${esc(it.group)}</div>` : ""}</td>${cs.map((c, k) => `<td><i class="ck ${esc(c)}" title="${esc(cellNote(it, CK[k]))}">${SYM[c] ?? ""}</i></td>`).join("")}</tr>`).join("")}
+        </table></div></div>`;
+    });
+  }
+  el.innerHTML = h;
+}
+
+function factPills(f) {
+  if (!f) return "";
+  const p = [];
+  if (f.collision) p.push(`Collision ${f.collision}`);
+  if (f.cut) p.push(`Leaves ${f.cut}`);
+  if (f.height_cm != null) p.push(`${f.height_cm} cm`);
+  if (f.tris != null) p.push(`${Number(f.tris).toLocaleString()} tris`);
+  if (f.mb != null) p.push(`${f.mb} MB`);
+  if (f.count != null) p.push(`${f.count} meshes`);
+  return p.map(x => `<span class="pill num">${esc(x)}</span>`).join("");
+}
+function reviewItems() {
+  return runItems().filter(it => (it.shots || []).length || S.verdicts[it.id])
+    .filter(it => S.group === "all" || it.group === S.group)
+    .filter(it => { const st = statusOf(it.id), fx = isFixed(it); return S.rf === "All" || (S.rf === "To review" && (st === "pending" || fx)) || (S.rf === "Rejected" && st === "rejected" && !fx) || (S.rf === "Approved" && st === "approved"); });
+}
+
+function renderReview() {
+  const el = $("pg-review");
+  if (!token()) { el.innerHTML = signIn(); return; }
+  const all = runItems().filter(it => (it.shots || []).length || S.verdicts[it.id]);
+  const items = reviewItems();
+  const groups = [...new Set(all.map(it => it.group).filter(Boolean))];
+  const r = run();
+  // Keep a half-typed note and its cursor across refreshes.
+  const a = document.activeElement, focusId = a && a.id && a.id.startsWith("note-") ? a.id : null;
+  const selr = focusId ? [a.selectionStart, a.selectionEnd] : null;
+  let h = `${r && r.summary ? `<p class="sub" style="margin:0;max-width:70ch">${esc(r.summary)}</p>` : ""}
+    <div class="tabs" role="group" aria-label="Filter reviews">${["To review", "Rejected", "Approved", "All"].map(f => `<button class="tab" data-rf="${f}" aria-selected="${f === S.rf}">${f}</button>`).join("")}</div>
+    ${groups.length > 1 ? `<div class="tabs" role="group" aria-label="Group">${["all", ...groups].map(g => `<button class="tab" data-g="${esc(g)}" aria-selected="${g === S.group}">${g === "all" ? "Every group" : esc(g)}</button>`).join("")}</div>` : ""}`;
+  if (!all.length) h += emptyBox("Nothing to review yet", "Cards appear here as each mesh gets its collision and close-up shots. Approve or reject each one and leave a note; Claude reads the verdicts and fixes the rejected ones.");
+  else if (!items.length) h += emptyBox(`No ${S.rf.toLowerCase()} meshes`, "Pick another filter above.");
+  h += `<div class="rgrid">${items.map(it => {
+    const st = statusOf(it.id), v = S.verdicts[it.id] || {}, fixed = isFixed(it);
+    const shots = it.shots || [], t = Math.min(S.tab[it.id] || 0, Math.max(0, shots.length - 1));
+    const note = S.drafts[it.id] ?? v.note ?? "";
+    return `<article class="card rc ${fixed ? "fixed" : st === "rejected" ? "danger" : st === "approved" ? "ok" : ""}" data-id="${esc(it.id)}">
+      ${shots.length > 1 ? `<div class="stabs" role="tablist">${shots.map((s, i) => `<button class="tab" role="tab" data-stab="${i}" aria-selected="${i === t}">${esc(s.label)}</button>`).join("")}</div>` : ""}
+      ${shots.length ? `<button class="shot" data-open="${t}" aria-label="Open ${esc(shots[t].label)} full size"><img loading="lazy" data-shot="${esc(shots[t].path)}" alt="${esc(it.name)} - ${esc(shots[t].label)}"></button>` : ""}
+      <div class="body">
+        <div class="row between"><span class="mesh">${esc(it.name)}</span><span class="badge ${fixed ? "" : st}">${fixed ? "FIXED, CHECK AGAIN" : st === "pending" ? "TO REVIEW" : st.toUpperCase()}</span></div>
+        ${it.group ? `<div class="meta">${esc(it.group)}</div>` : ""}
+        <div class="facts">${factPills(it.facts)}</div>
+        ${it.note ? `<div class="${fixed ? "said" : "meta"}">${esc(it.note)}</div>` : ""}
+        <textarea id="note-${esc(it.id)}" placeholder="Note for Claude (what to fix)" aria-label="Note for ${esc(it.name)}">${esc(note)}</textarea>
+        <div class="acts">
+          <button class="btn primary app" data-set="approved" aria-pressed="${st === "approved" && !fixed}">Approve</button>
+          <button class="btn rej" data-set="rejected" aria-pressed="${st === "rejected" && !fixed}">Reject</button>
+        </div>
+        ${v.at ? `<div class="meta">${esc(when(v.at, true))}</div>` : ""}
+      </div></article>`;
+  }).join("")}</div>`;
+  el.innerHTML = h;
+  if (focusId) { const ta = $(focusId); if (ta) { ta.focus({ preventScroll: true }); ta.setSelectionRange(selr[0], selr[1]); } }
+  fillShots(el);
+}
+
+const SETTING_ORDER = ["Import", "Texel", "Leaf cut", "Wind", "Collision", "Shots", "Naming", "Publish"];
+function renderSettings() {
+  const el = $("pg-settings");
+  if (!S.settings.length) { el.innerHTML = token() ? emptyBox("No settings recorded yet", "Claude records the values each stage uses with the script they come from.") : signIn(); return; }
+  const rank = s => { const i = SETTING_ORDER.indexOf(s.id); return i < 0 ? 99 : i; };
+  el.innerHTML = `<p class="sub" style="margin:0 0 10px">The values each stage uses and where they come from. Each run logs a snapshot; changes are made in the scripts.</p>
+    <div class="sgrid">${[...S.settings].sort((a, b) => rank(a) - rank(b)).map(s => `<div class="card sc"><h4>${esc(s.id)}</h4>
+      <div class="kv">${Object.entries(s.values || {}).map(([k, v]) => `<span>${esc(k)}</span><b>${esc(v)}</b>`).join("")}</div>
+      <div class="src">${esc(s.source || "")}</div></div>`).join("")}</div>`;
+}
+
+function renderPacks() {
+  const el = $("pg-packs");
+  if (!S.packs.length) { el.innerHTML = token() ? emptyBox("No packs recorded yet", "Each vegpack a run touches shows its size against the cap, branch, what is pushed to main and release, and whether it is registered and staged.") : signIn(); return; }
+  const sha = s => s ? `<span class="num">${esc(String(s).slice(0, 7))}</span>` : `<span class="meta">not pushed</span>`;
+  el.innerHTML = `<div class="sgrid">${[...S.packs].sort((a, b) => a.id.localeCompare(b.id)).map(p => {
+    const pct = p.cap_mb ? Math.min(100, 100 * (p.size_mb || 0) / p.cap_mb) : 0, over = p.cap_mb && p.size_mb > p.cap_mb;
+    return `<div class="card sc ${over ? "danger" : ""}"><h4 class="mesh">plugin_vegetation_${esc(p.id)}</h4>
+      <div><div class="row between"><span class="meta">Size</span><span class="num">${Math.round(p.size_mb || 0).toLocaleString()} / ${Math.round(p.cap_mb || 0).toLocaleString()} MB</span></div>
+      <div class="bar thin"><i class="${over ? "f" : "d"}" style="width:${pct}%"></i></div></div>
+      <div class="kv"><span>Branch</span><b>${esc(p.branch || "—")}</b><span>main</span><b>${sha(p.main_sha)}</b><span>release</span><b>${sha(p.release_sha)}</b>
+      <span>Submodule</span><b>${p.submodule ? "registered" : "missing"}</b><span>Release stage</span><b>${esc(p.stage_state || "—")}</b></div>
+      <div class="src">${p.updated ? `checked ${esc(ago(p.updated))}` : ""}</div></div>`;
+  }).join("")}</div>`;
+}
+
+function renderLog() {
+  const el = $("pg-log");
+  const rows = [...S.log].sort((a, b) => String(b.at).localeCompare(String(a.at)));
+  const kinds = [...new Set(rows.map(l => l.kind).filter(Boolean))];
+  if (!rows.length) { el.innerHTML = token() ? emptyBox("Nothing logged for this run", "Steps with their durations, decisions and settings changes land here, so you can see what was already done.") : signIn(); return; }
+  const shown = rows.filter(l => S.lf === "all" || l.kind === S.lf);
+  el.innerHTML = `<div class="tabs" role="group" aria-label="Filter log">${["all", ...kinds].map(k => `<button class="tab" data-lf="${esc(k)}" aria-selected="${k === S.lf}">${k === "all" ? "All" : esc(k)}</button>`).join("")}</div>
+    <div class="card" style="overflow:hidden">${shown.map(l => `<div class="lrow"><span class="num meta">${esc(when(l.at))}</span><span class="lk"><span class="pill">${esc(l.kind)}</span></span><span>${esc(l.text)}</span><span class="num meta">${l.duration_s ? dur(l.duration_s) : ""}</span></div>`).join("")}</div>`;
+}
+
+function render() {
+  renderHead();
+  if (S.page === "progress") renderProgress();
+  if (S.page === "review") renderReview();
+  if (S.page === "settings") renderSettings();
+  if (S.page === "packs") renderPacks();
+  if (S.page === "log") renderLog();
+}
+
+// verdicts.json is the one file this page writes: read it fresh, change one mesh, PUT with its sha; retry on a race.
+async function saveVerdict(id, patch) {
+  const cur = S.verdicts[id] || {};
+  const body = { status: cur.status || "pending", note: cur.note || "", ...patch, at: new Date().toISOString() };
+  S.verdicts = { ...S.verdicts, [id]: body }; S.saving++; render();
+  const path = `contents/${ROOT}/${S.sel}/verdicts.json`;
+  try {
+    for (let i = 0; i < 3; i++) {
+      const g = await api(`${path}?ref=main&t=${Date.now()}`);
+      const j = g.ok ? await g.json() : null;
+      const remote = j ? JSON.parse(b64dec(j.content)) : {};
+      remote[id] = body;
+      const r = await api(path, { method: "PUT", body: JSON.stringify({ message: `Vegpack: verdict ${id}`, content: b64enc(JSON.stringify(remote, null, 1)), branch: "main", ...(j ? { sha: j.sha } : {}) }) });
+      if (r.ok) { delete S.drafts[id]; S.verdicts = remote; runShas["verdicts.json"] = (await r.json()).content.sha; S.conn = ""; break; }
+      if (r.status !== 409 && r.status !== 422) throw new Error(`save ${r.status}`);
+      if (i === 2) throw new Error("busy");
+    }
+  } catch (e) {
+    S.drafts[id] = body.note;
+    S.conn = e.auth ? "GitHub refused the token. Open the Board app on this device and paste a new one." : "Your last verdict did not save. Try again in a moment.";
+  }
+  S.saving--; render();
+}
+
+document.addEventListener("click", e => {
+  const t = e.target.closest("[data-page]"); if (t) { S.page = t.dataset.page; ls("vd.page", S.page); render(); return; }
+  const pf = e.target.closest("[data-pf]"); if (pf) { S.pf = pf.dataset.pf; render(); return; }
+  const rf = e.target.closest("[data-rf]"); if (rf) { S.rf = rf.dataset.rf; ls("vr.rfilter", S.rf); render(); return; }
+  const g = e.target.closest("[data-g]"); if (g) { S.group = g.dataset.g; render(); return; }
+  const lf = e.target.closest("[data-lf]"); if (lf) { S.lf = lf.dataset.lf; render(); return; }
+  const card = e.target.closest(".rc"); if (!card) return;
+  const id = card.dataset.id;
+  const st = e.target.closest("[data-stab]"); if (st) { S.tab[id] = +st.dataset.stab; renderReview(); return; }
+  const set = e.target.closest("[data-set]");
+  if (set) { const v = set.dataset.set; saveVerdict(id, { status: statusOf(id) === v && !isFixed(S.items.find(x => x.id === id) || {}) ? "pending" : v, note: $("note-" + id).value }); return; }
+  const open = e.target.closest("[data-open]"); if (open) openLb(id, +open.dataset.open);
+});
+document.addEventListener("input", e => { const ta = e.target.closest("textarea[id^='note-']"); if (ta) S.drafts[ta.id.slice(5)] = ta.value; });
+document.addEventListener("change", e => {
+  const ta = e.target.closest("textarea[id^='note-']");
+  if (ta) { const id = ta.id.slice(5); if ((S.verdicts[id]?.note || "") !== ta.value) saveVerdict(id, { note: ta.value }); else delete S.drafts[id]; }
+});
+$("run").addEventListener("change", e => { selectRun(e.target.value, true); });
+
+function selectRun(id, byViewer) {
+  if (byViewer) { S.picked = true; ls("vr.run", id); }
+  if (id === S.sel) return;
+  S.sel = id; S.group = "all"; S.lf = "all"; S.items = []; S.steps = {}; S.log = []; S.verdicts = {}; runShas = {};
+  render(); if (byViewer) poll();
+}
+// Newest run until the viewer picks one.
+function pickDefault() {
+  const ids = S.index.map(r => r.id);
+  if (S.picked && ids.includes(S.sel)) return;
+  const saved = ls("vr.run");
+  if (saved && ids.includes(saved)) { S.picked = true; selectRun(saved); }
+  else if (ids.length) selectRun(ids[0]);
+}
+
+async function openLb(id, i) { S.lb = { list: reviewItems().flatMap(it => (it.shots || []).map((s, k) => ({ it, s, k }))) }; S.lb.i = Math.max(0, S.lb.list.findIndex(x => x.it.id === id && x.k === i)); await showLb(); $("lb").showModal(); }
+async function showLb() { const x = S.lb.list[S.lb.i]; if (!x) return; $("lbImg").removeAttribute("src"); $("lbImg").alt = x.it.name + " - " + x.s.label; $("lbName").textContent = `${x.it.name} · ${x.s.label} (${S.lb.i + 1}/${S.lb.list.length})`; const u = await shotUrl(x.s.path); if (u) $("lbImg").src = u; }
+$("lbPrev").onclick = () => { S.lb.i = (S.lb.i - 1 + S.lb.list.length) % S.lb.list.length; showLb(); };
+$("lbNext").onclick = () => { S.lb.i = (S.lb.i + 1) % S.lb.list.length; showLb(); };
+$("lbClose").onclick = () => $("lb").close();
+document.addEventListener("keydown", e => { if (!$("lb").open) return; if (e.key === "ArrowRight") $("lbNext").click(); if (e.key === "ArrowLeft") $("lbPrev").click(); });
+
+render();
+poll();
+setInterval(() => { if (!document.hidden) poll(); else render(); }, POLL_S * 1000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(); });
+</script>
+</body></html>

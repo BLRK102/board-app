@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#141414">
+<title>Pure Pages</title>
+<style>
+:root { --accent: #C9FF3D; --bg: #141414; --surface: #1C1C1C; --border: #3A3A3A; --text: #FFFFFF; --muted: #9A9A9A; --warn: #FFB020; color-scheme: dark }
+* { box-sizing: border-box }
+html, body { height: 100%; margin: 0 }
+body { background: var(--bg); color: var(--text); font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column }
+header { display: flex; gap: 12px; align-items: center; padding: calc(8px + env(safe-area-inset-top, 0px)) 16px 8px; background: var(--surface); border-bottom: 1px solid var(--border); min-width: 0 }
+header a { color: var(--text); text-decoration: none; background: #262626; border-radius: 6px; padding: 4px 10px; white-space: nowrap }
+header a:hover { background: #454545 }
+#title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0 }
+#meta { color: var(--muted); white-space: nowrap }
+iframe { flex: 1; width: 100%; border: 0; background: #fff }
+.msg { margin: 16px; padding: 12px 14px; border: 1px solid var(--warn); border-radius: 8px; background: var(--surface) }
+</style>
+</head><body>
+<header><a href="./">← Pages</a><span id="title">Loading…</span><span id="meta"></span></header>
+<div id="msg" class="msg" hidden></div>
+<iframe id="page" title="Page" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox allow-forms allow-modals" hidden></iframe>
+<script>
+// Loads vault 20_Projects/Board/pages/<p>/index.html with the Board token and shows it in a sandboxed frame (opaque origin:
+// the page can't read this site's storage, so never the token). Pages saved from claude.ai lack a document skeleton.
+const REPO = "BLRK102/SecondBrain", ROOT = "20_Projects/Board/pages";
+const $ = id => document.getElementById(id);
+const token = () => { try { return JSON.parse(localStorage.getItem("board:token") || '""'); } catch (e) { return ""; } };
+const slug = new URLSearchParams(location.search).get("p") || "";
+const fail = html => { $("msg").hidden = false; $("msg").innerHTML = html; $("title").textContent = "Pure Pages"; };
+async function raw(path) {
+  const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${path}?ref=main&t=${Date.now()}`,
+    { cache: "no-store", headers: { Authorization: `Bearer ${token()}`, Accept: "application/vnd.github.raw" } });
+  if (r.status === 401 || r.status === 403) throw Object.assign(new Error("auth"), { auth: true });
+  if (!r.ok) throw new Error(String(r.status));
+  return r.text();
+}
+(async () => {
+  if (!/^[a-z0-9-]+$/.test(slug)) return fail(`No page chosen. <a href="./">Back to Pure Pages</a>`);
+  if (!token()) return fail(`This device isn't signed in. Open the <a href="../">Board</a> once and add your token there.`);
+  try {
+    let html = await raw(`${ROOT}/${slug}/index.html`);
+    // srcdoc has no base URL: inline the page's sibling files (relative src/href/url()) as data: URIs
+    const rel = [...new Set([...html.matchAll(/(?:src|href)=["']([\w./-]+\.(?:jpe?g|png|svg|css|gif|webp))["']|url\(["']?([\w./-]+\.(?:jpe?g|png|svg|gif|webp|woff2?))["']?\)/gi)]
+      .map(m => m[1] || m[2]).filter(p => !p.startsWith("/") && !p.includes("..")))];
+    for (const p of rel) {
+      const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${ROOT}/${slug}/${p}?ref=main`,
+        { headers: { Authorization: `Bearer ${token()}`, Accept: "application/vnd.github.raw" } });
+      if (!r.ok) continue;
+      const blob = await r.blob(), type = /\.svg$/i.test(p) ? "image/svg+xml" : /\.css$/i.test(p) ? "text/css" : blob.type;
+      const url = await new Promise(ok => { const f = new FileReader(); f.onload = () => ok(f.result); f.readAsDataURL(new Blob([blob], { type })); });
+      html = html.split(p).join(url);
+    }
+    const t = (html.match(/<title>([^<]*)<\/title>/i) || [])[1] || slug;
+    document.title = `${t} · Pure Pages`;
+    $("title").textContent = t;
+    const doc = /<html[\s>]/i.test(html) ? html :
+      `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">` +
+      `<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>${html}</body></html>`;
+    $("page").srcdoc = doc;
+    $("page").hidden = false;
+  } catch (e) {
+    fail(e.auth ? "The Board token was refused. Re-enter it in the Board app." : `Couldn't load this page (${e.message}). <a href="./">Back</a>`);
+  }
+})();
+</script>
+</body></html>

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#141414">
+<title>Pure Pages</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap">
+<style>
+/* Pure theme (as the Board / Vegpack Runs pages) */
+:root {
+  --accent: #C9FF3D; --accent-text: #0A0A0A; --bg: #141414; --surface: #1C1C1C; --surface-alt: #262626;
+  --pill: #454545; --border: #3A3A3A; --text: #FFFFFF; --muted: #9A9A9A; --warn: #FFB020;
+  --radius: 8px; --radius-btn: 6px;
+  --font: "Roboto", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "Roboto Mono", ui-monospace, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box }
+[hidden] { display: none !important }
+html { padding-top: env(safe-area-inset-top, 0px) }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 var(--font); padding-inline: 16px; padding-block: 16px 48px }
+.wrap { max-width: 1100px; margin-inline: auto; display: grid; gap: 20px }
+h1 { font-size: 24px; margin: 0 } h2 { font-size: 13px; margin: 0; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; font-weight: 600 }
+a { color: inherit }
+.sub { color: var(--muted); font-size: 12px }
+.row { display: flex; gap: 8px 12px; align-items: center; flex-wrap: wrap }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; display: grid; gap: 4px; text-decoration: none; min-width: 0 }
+.card:hover { border-color: var(--accent) }
+.card b { font-size: 15px } .card .d { color: var(--muted); font-size: 12.5px } .card .m { color: var(--muted); font-size: 11.5px; font-family: var(--mono) }
+.card.live { border-left: 3px solid var(--accent) }
+.links a { background: var(--surface-alt); border-radius: var(--radius-btn); padding: 6px 12px; text-decoration: none; font-weight: 500 }
+.links a:hover { background: var(--pill) }
+input { font: inherit; background: var(--surface-alt); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-btn); padding: 6px 10px; width: min(320px, 100%) }
+.chip { font: inherit; font-size: 12px; background: var(--surface-alt); color: var(--muted); border: 1px solid var(--border); border-radius: 12px; padding: 3px 10px; cursor: pointer }
+.chip[aria-pressed="true"] { color: var(--accent-text); background: var(--accent); border-color: var(--accent) }
+.list { display: grid; gap: 4px }
+.item { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 8px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); text-decoration: none }
+.item:hover { border-color: var(--accent) }
+.item .d { grid-column: 1 / -1; color: var(--muted); font-size: 12.5px }
+.item .m { color: var(--muted); font-size: 11.5px; font-family: var(--mono) }
+.msg { background: var(--surface); border: 1px solid var(--warn); border-radius: var(--radius); padding: 12px 14px }
+</style>
+</head><body>
+<div class="wrap">
+  <header class="row" style="justify-content:space-between">
+    <div><h1>Pure Pages</h1><div class="sub">Everything in one place: dashboards, live trackers and the page archive. Pages load from the private vault.</div></div>
+    <nav class="row links"><a href="../">Board</a><a href="../veg/">Vegpack Runs</a></nav>
+  </header>
+  <div id="msg" class="msg" hidden></div>
+  <section id="liveSec" class="wrap" style="gap:10px" hidden><h2>Live</h2><div id="live" class="grid"></div></section>
+  <section id="archSec" class="wrap" style="gap:10px" hidden>
+    <div class="row" style="justify-content:space-between"><h2>Archive</h2><input id="q" type="search" placeholder="Search pages" aria-label="Search pages"></div>
+    <div id="chips" class="row"></div>
+    <div id="arch" class="list"></div>
+  </section>
+</div>
+<script>
+// Catalogue: vault BLRK102/SecondBrain 20_Projects/Board/pages/{pages.json (live), archive.json} via the GitHub API with the
+// Board app's token (same origin, localStorage board:token). Pages open in view.html (sandboxed, no token access).
+const REPO = "BLRK102/SecondBrain", ROOT = "20_Projects/Board/pages";
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const token = () => { try { return JSON.parse(localStorage.getItem("board:token") || '""'); } catch (e) { return ""; } };
+const pref = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) {} return null; };
+async function getJson(name) {
+  const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${ROOT}/${name}?ref=main&t=${Date.now()}`,
+    { cache: "no-store", headers: { Authorization: `Bearer ${token()}`, Accept: "application/vnd.github.raw" } });
+  if (r.status === 401 || r.status === 403) throw Object.assign(new Error("auth"), { auth: true });
+  if (r.status === 404) return [];
+  if (!r.ok) throw new Error(`${name}: ${r.status}`);
+  return r.json();
+}
+let area = pref("pp.area") || "All", all = [];
+function card(p, live) {
+  return `<a class="card${live ? " live" : ""}" href="view.html?p=${encodeURIComponent(p.slug)}"><b>${esc(p.title)}</b>` +
+    `<span class="d">${esc(p.desc || "")}</span><span class="m">${esc(p.area || "")}${p.updated ? " · " + esc(p.updated) : ""}</span></a>`;
+}
+function drawArchive() {
+  const q = $("q").value.trim().toLowerCase();
+  const areas = ["All", ...[...new Set(all.map(p => p.area || "Other"))].sort()];
+  $("chips").innerHTML = areas.map(a => `<button class="chip" data-a="${esc(a)}" aria-pressed="${a === area}">${esc(a)}</button>`).join("");
+  const rows = all.filter(p => (area === "All" || (p.area || "Other") === area) &&
+    (!q || `${p.title} ${p.desc} ${p.area}`.toLowerCase().includes(q)));
+  $("arch").innerHTML = rows.map(p => `<a class="item" href="view.html?p=${encodeURIComponent(p.slug)}"><b>${esc(p.title)}</b>` +
+    `<span class="m">${esc(p.updated || "")}</span><span class="d">${esc(p.desc || "")}${p.area ? " · " + esc(p.area) : ""}</span></a>`).join("")
+    || `<div class="sub">Nothing matches.</div>`;
+}
+$("chips").addEventListener("click", e => { const b = e.target.closest("[data-a]"); if (b) { area = b.dataset.a; pref("pp.area", area); drawArchive(); } });
+$("q").addEventListener("input", drawArchive);
+(async () => {
+  if (!token()) {
+    $("msg").hidden = false;
+    $("msg").innerHTML = `This device isn't signed in. Open the <a href="../">Board</a> once and add your token there, then come back.`;
+    return;
+  }
+  try {
+    const [live, arch] = await Promise.all([getJson("pages.json"), getJson("archive.json")]);
+    const liveUrls = new Set(live.map(p => p.url).filter(Boolean)), liveSlugs = new Set(live.map(p => p.slug));
+    $("live").innerHTML = live.map(p => card(p, true)).join("");
+    $("liveSec").hidden = !live.length;
+    all = arch.filter(p => String(p.status || "copied").startsWith("copied") && !liveUrls.has(p.url) && !liveSlugs.has(p.slug))
+      .sort((a, b) => String(b.updated).localeCompare(String(a.updated)));
+    $("archSec").hidden = !all.length;
+    drawArchive();
+  } catch (e) {
+    $("msg").hidden = false;
+    $("msg").textContent = e.auth ? "The Board token was refused. Re-enter it in the Board app." : `Couldn't load the page list (${e.message}).`;
+  }
+})();
+</script>
+</body></html>
